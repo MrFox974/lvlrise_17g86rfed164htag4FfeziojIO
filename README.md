@@ -1,6 +1,18 @@
-# StarterProject — Guide complet (V2)
+# LvlRise — Guide complet
 
-Ce document explique comment **créer, configurer et déployer** un site à partir de ce starter, comment **mettre en place les serveurs AWS** (Lambda, Amplify, RDS PostgreSQL), et détaille la **structure du projet**.
+LvlRise tient sur trois modules, et rien d'autre :
+
+- **FlashCards** — collections de cartes révisées en répétition espacée (SM-2),
+  créées à la main, importées depuis un texte ou générées par IA ;
+- **Routines** — habitudes quotidiennes, planifiées par jour de la semaine ;
+- **To-do list** — tâches priorisées par tag, avec une note attachable à chacune.
+
+La vue d'ensemble (`/home`) agrège les trois : un cadran des révisions du jour ou
+de la semaine, les tâches prioritaires et l'avancement des routines.
+
+Ce document explique comment **configurer et déployer** l'application, comment
+**mettre en place les serveurs AWS** (Lambda, Amplify, RDS PostgreSQL), et
+détaille la **structure du projet**.
 
 ---
 
