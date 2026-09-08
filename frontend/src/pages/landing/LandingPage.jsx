@@ -4,15 +4,15 @@ import { trackPageVisit } from '../../utils/adminApi';
 
 const FEATURES = [
   {
-    id: 'flashcards',
-    title: 'FlashCards',
-    description: 'Créez vos collections de cartes et révisez-les en répétition espacée (algorithme SM-2). Chaque carte revient au bon moment, ni trop tôt ni trop tard.',
+    id: 'apprentissage',
+    title: 'Apprentissage',
+    description: 'Définissez des objectifs perso et pro en minutes par jour ou par semaine. Suivez vos domaines avec des jauges visuelles et restez régulier.',
     icon: (
       <svg className="w-8 h-8 md:w-10 md:h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
     ),
-    color: 'var(--om-perso)',
+    color: 'var(--om-accent)',
   },
   {
     id: 'routines',
@@ -36,45 +36,67 @@ const FEATURES = [
     ),
     color: 'var(--om-pro-strong)',
   },
+  {
+    id: 'productivite',
+    title: 'Productivité',
+    description: 'Bibliothèque Markdown par domaines et chapitres, Flashcards (répétition espacée type SM-2) et notes rapides. Tout pour apprendre et réviser.',
+    icon: (
+      <svg className="w-8 h-8 md:w-10 md:h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+      </svg>
+    ),
+    color: 'var(--om-perso)',
+  },
+  {
+    id: 'assistant',
+    title: 'Assistant vocal IA',
+    description: 'Sur les plans Croissance et Maîtrise : assistance vocale IA et rapports hebdomadaires pour garder le cap et rester motivé.',
+    icon: (
+      <svg className="w-8 h-8 md:w-10 md:h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+      </svg>
+    ),
+    color: 'var(--om-accent)',
+  },
 ];
 
 const STEPS = [
   {
     step: 1,
-    title: 'Constituez vos collections',
-    text: 'Créez vos cartes à la main, importez-les depuis un texte, ou laissez l\'IA générer une collection sur le sujet de votre choix.',
+    title: 'Définissez vos objectifs',
+    text: 'Créez des domaines d\'apprentissage (perso et pro) et fixez des objectifs en minutes par jour ou par semaine.',
     image: '/landing/step-1-definir.png',
     imageAlt: 'Définir : cible et checklist pour fixer vos objectifs',
   },
   {
     step: 2,
     title: 'Routines et suivi quotidien',
-    text: 'Routines et to-do list vous aident à rester régulier ; la vue d\'ensemble montre votre progression en un coup d\'œil.',
+    text: 'Routines, to-do list et jauges vous aident à rester régulier et à voir votre progression en un coup d\'œil.',
     image: '/landing/step-2-routines.png',
     imageAlt: 'Routines et suivi : calendrier et horloge pour suivre vos habitudes',
   },
   {
     step: 3,
     title: 'Réviser et ancrer',
-    text: 'La répétition espacée ramène chaque carte au bon moment : vous révisez moins longtemps et vous retenez plus.',
+    text: 'Bibliothèque de notes, Flashcards (répétition espacée) et assistant IA pour ancrer vos connaissances.',
     image: '/landing/step-3-reviser.png',
-    imageAlt: 'Réviser et ancrer : livre et carnets pour consolider vos connaissances',
+    imageAlt: 'Réviser et ancrer : livre et carnets pour consolider vos apprentissages',
   },
 ];
 
 const TESTIMONIALS = [
   {
-    quote: 'Enfin une app qui lie routines, tâches et révision. Je ne perds plus le fil.',
+    quote: 'Enfin une app qui lie objectifs, routines et révision. Je ne perds plus le fil.',
     author: 'Marie L.',
     role: 'Autodidacte',
   },
   {
-    quote: 'Les flashcards et le suivi des routines m\'aident à rester constant. Simple et efficace.',
+    quote: 'Les jauges par domaine et les flashcards m\'aident à rester constant. Simple et efficace.',
     author: 'Thomas D.',
     role: 'Étudiant',
   },
   {
-    quote: 'Les rappels et la vue d\'ensemble me gardent motivé. Je recommande.',
+    quote: 'L\'assistant vocal et les rapports hebdo me gardent motivé. Je recommande.',
     author: 'Sophie M.',
     role: 'Professionnelle en reconversion',
   },
@@ -127,7 +149,7 @@ function LandingPage() {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-center gap-10 lg:gap-24 xl:gap-28 lg:-translate-y-10">
             <div className="max-w-2xl lg:max-w-[30rem] mx-auto lg:mx-0 flex-shrink-0 text-center lg:text-left">
               <h1 className="text-4xl sm:text-5xl md:text-6xl font-medium text-[var(--om-text)] leading-tight mb-5 md:mb-7 animate-fade-in">
-                Réviser, s&apos;organiser, tenir le rythme.
+                Structurez votre apprentissage. Passez à l&apos;action.
               </h1>
               <p className="text-xl md:text-2xl text-[var(--om-muted)] mb-9 md:mb-11 max-w-2xl mx-auto lg:mx-0 animate-fade-in" style={{ animationDelay: '0.1s' }}>
                 De l&apos;intention à la pratique régulière. Objectifs, routines, flashcards et assistant IA — tout en un.
@@ -290,7 +312,7 @@ function LandingPage() {
       <section id="temoignages" className="py-16 md:py-22 lg:py-26 bg-[var(--om-bg)]">
         <div className="container mx-auto px-4 md:px-6 lg:px-8">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-medium text-[var(--om-text)] text-center mb-5 md:mb-7">
-            Ils tiennent déjà le rythme
+            Ils structurent déjà leur apprentissage
           </h2>
           <p className="text-[var(--om-muted)] text-center max-w-2xl mx-auto mb-13 md:mb-18 text-lg md:text-xl">
             Rejoignez les apprenants qui ont choisi la régularité.
@@ -384,7 +406,7 @@ function LandingPage() {
                 LvlRise est né d&apos;un constat simple : on nous demande d&apos;apprendre toute notre vie, mais peu d&apos;outils nous aident à structurer cette pratique au quotidien. Entre les bonnes intentions et la régularité, il manquait une plateforme qui lie objectifs, suivi et révision.
               </p>
               <p className="text-[var(--om-muted)] text-base md:text-lg leading-relaxed mb-6">
-                Nous avons conçu LvlRise pour les autodidactes, les étudiants et les professionnels en formation : une seule app pour réviser avec des flashcards en répétition espacée, tenir ses routines et garder ses tâches sous contrôle. Trois outils, pas trente.
+                Nous avons conçu LvlRise pour les autodidactes, les étudiants et les professionnels en formation : une seule app pour définir vos objectifs (perso et pro), suivre vos routines et vos tâches, organiser vos notes par domaines, réviser avec des flashcards (répétition espacée) et, sur les formules payantes, bénéficier d&apos;un assistant vocal IA.
               </p>
               <p className="text-[var(--om-text)] font-medium text-base md:text-lg">
                 De l&apos;intention à la pratique régulière — c&apos;est notre promesse.
@@ -408,7 +430,7 @@ function LandingPage() {
       <section id="cta-final" className="py-14 md:py-20 lg:py-24 bg-[var(--om-accent)] text-[var(--om-on-accent)]">
         <div className="container mx-auto px-4 md:px-6 lg:px-8 text-center">
           <h2 className="text-2xl md:text-3xl lg:text-4xl font-medium mb-4 md:mb-6">
-            Prêt à tenir le rythme ?
+            Prêt à structurer votre apprentissage ?
           </h2>
           <p className="text-[var(--om-on-accent)]/90 text-base md:text-lg max-w-xl mx-auto mb-8 md:mb-10">
             Créez un compte gratuit en quelques secondes. Aucune carte bancaire requise.

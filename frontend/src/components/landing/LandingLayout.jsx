@@ -159,7 +159,7 @@ function LandingLayout({ children }) {
                 <img src="/lvlrise-logo.png" alt="LvlRise" className={`w-auto opacity-90 ${isLanding ? 'h-9' : 'h-8'}`} />
               </Link>
               <p className={`text-[var(--om-muted)] max-w-xs ${isLanding ? 'text-[15px]' : 'text-sm'}`}>
-                Réviser, s&apos;organiser, tenir le rythme. De l&apos;intention à la pratique régulière.
+                Structurez votre apprentissage. De l&apos;intention à la pratique régulière.
               </p>
             </div>
             <div className={`flex flex-wrap gap-6 md:gap-8 ${isLanding ? 'text-[15px]' : 'text-sm'}`}>

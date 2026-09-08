@@ -4,8 +4,8 @@ import { getOnboardingStatus, getGenerationStatus } from '../utils/onboardingApi
 /**
  * Loader pour la route /onboarding : vérifie que l'onboarding n'est accessible qu'une seule fois
  * et seulement si :
- * - C'est la première connexion (aucune collection, pas de session)
- * - OU l'utilisateur a choisi "commencer rapidement" (collections créées mais onboarding_completed_at pas encore défini)
+ * - C'est la première connexion (pas de domaines, pas de session)
+ * - OU l'utilisateur a choisi "commencer rapidement" (domaines créés mais onboarding_completed_at pas encore défini)
  * - OU l'utilisateur a choisi "personnaliser avec l'IA" et la génération est au minimum lancée
  * 
  * Si onboarding_completed_at est défini, l'accès est refusé (redirection vers /home).
@@ -55,7 +55,7 @@ export const onboardingLoader = async () => {
     
     // Si on arrive ici, c'est que needsOnboarding est false mais isGenerating aussi
     // et onboarding_completed_at n'est pas défini (sinon on aurait redirigé)
-    // Cela signifie que l'utilisateur a des collections (commencer rapidement) mais pas de session
+    // Cela signifie que l'utilisateur a des domaines (commencer rapidement) mais pas de session
     // → permettre l'accès car l'onboarding n'est pas encore terminé
     return null;
   } catch (err) {

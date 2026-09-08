@@ -22,8 +22,8 @@ const User = require('../models/User');
 const Routine = require('../models/Routine');
 const RoutineCompletion = require('../models/RoutineCompletion');
 const TodoItem = require('../models/TodoItem');
-const Flashcard = require('../models/Flashcard');
-const FlashcardDeck = require('../models/FlashcardDeck');
+const Domain = require('../models/Domain');
+const LearningTime = require('../models/LearningTime');
 const NotificationLog = require('../models/NotificationLog');
 const pushService = require('./push.service');
 const messages = require('./notification-messages.service');
@@ -42,6 +42,9 @@ const REPORT_BEFORE_NIGHT = 45;
 const MORNING_LIMIT_MINUTES = 12 * 60;
 
 const DEFAULT_TIMEZONE = 'Europe/Paris';
+const DAY_NAMES_FROM_MONDAY = [
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+];
 const TAG_PRIORITY = { absolue: 0, important: 1, 'à faire': 2, idée: 3, projet: 4 };
 const URGENT_TAGS = new Set(['absolue', 'important']);
 
@@ -136,43 +139,30 @@ async function buildUserContext(user, local) {
     (t) => t.completed_at && getLocalDateStr(new Date(t.completed_at), timezone) === dateStr
   ).length;
 
-  // Flashcards : ce qui a été révisé dans la journée de l'utilisateur, et ce
-  // qu'il lui reste à réviser. La table flashcard n'a pas de user_id : on passe
-  // par ses collections.
-  const decks = await FlashcardDeck.findAll({
+  const domains = await Domain.findAll({
     where: { user_id: user.id },
     order: [['position', 'ASC']],
-    attributes: ['id', 'name'],
+    attributes: ['id', 'name', 'type', 'minutes_per_day'],
   });
-  const deckIds = decks.map((d) => d.id);
-  const cards = deckIds.length > 0
-    ? await Flashcard.findAll({
-        where: { deck_id: deckIds },
-        attributes: ['id', 'deck_id', 'next_review_at', 'last_reviewed_at'],
+  const learningTimes = domains.length > 0
+    ? await LearningTime.findAll({
+        where: { user_id: user.id, date: dateStr },
+        attributes: ['domain_id', 'minutes'],
       })
     : [];
 
-  const now = new Date();
-  const reviewedToday = cards.filter(
-    (c) => c.last_reviewed_at && getLocalDateStr(new Date(c.last_reviewed_at), timezone) === dateStr
-  );
-  const reviewedIds = new Set(reviewedToday.map((c) => c.id));
-  // Une carte jamais programmée (next_review_at null) est neuve : elle est due.
-  const dueCards = cards.filter(
-    (c) => !reviewedIds.has(c.id) && (c.next_review_at == null || new Date(c.next_review_at) <= now)
-  );
+  const dayName = DAY_NAMES_FROM_MONDAY[dayOfWeek];
+  const domainStats = domains.map((d) => {
+    const perDay = d.minutes_per_day || {};
+    const expectedMinutes = perDay[dayName] || 0;
+    const actualMinutes = learningTimes
+      .filter((lt) => lt.domain_id === d.id)
+      .reduce((sum, lt) => sum + (lt.minutes || 0), 0);
+    return { id: d.id, name: d.name, expectedMinutes, actualMinutes };
+  });
 
-  const deckStats = decks
-    .map((d) => ({
-      id: d.id,
-      name: d.name,
-      reviewed: reviewedToday.filter((c) => c.deck_id === d.id).length,
-      due: dueCards.filter((c) => c.deck_id === d.id).length,
-    }))
-    .filter((d) => d.reviewed > 0 || d.due > 0);
-
-  const reviewedCount = reviewedToday.length;
-  const dueCount = dueCards.length;
+  const expectedMinutes = domainStats.reduce((sum, d) => sum + d.expectedMinutes, 0);
+  const actualMinutes = domainStats.reduce((sum, d) => sum + d.actualMinutes, 0);
 
   const sortedTodos = [...activeTodos].sort(
     (a, b) => (TAG_PRIORITY[a.tag] ?? 5) - (TAG_PRIORITY[b.tag] ?? 5)
@@ -201,13 +191,12 @@ async function buildUserContext(user, local) {
       top: sortedTodos.slice(0, 3).map((t) => ({ name: t.name, tag: t.tag })),
       completedToday,
     },
-    flashcards: {
-      decks: deckStats,
-      reviewed: reviewedCount,
-      due: dueCount,
-      // Charge du jour : révisé + restant. Null quand il n'y a rien à réviser.
-      percent: reviewedCount + dueCount > 0
-        ? Math.min(100, Math.round((reviewedCount / (reviewedCount + dueCount)) * 100))
+    learning: {
+      domains: domainStats,
+      expectedMinutes,
+      actualMinutes,
+      percent: expectedMinutes > 0
+        ? Math.min(100, Math.round((actualMinutes / expectedMinutes) * 100))
         : null,
     },
   };

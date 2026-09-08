@@ -1,10 +1,11 @@
 const Routine = require('../models/Routine');
 const RoutineCompletion = require('../models/RoutineCompletion');
 const TodoItem = require('../models/TodoItem');
-const Flashcard = require('../models/Flashcard');
-const FlashcardDeck = require('../models/FlashcardDeck');
+const Domain = require('../models/Domain');
+const LearningTime = require('../models/LearningTime');
 const { Op } = require('sequelize');
 
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 const TAG_PRIORITY = { absolue: 0, important: 1, 'à faire': 2, idée: 3, projet: 4 };
 
@@ -45,7 +46,7 @@ exports.getStats = async (req, res) => {
     const startWeekStr = startWeek.toISOString().slice(0, 10);
     const endWeekStr = endWeek.toISOString().slice(0, 10);
 
-    const [routinesAll, topTodos, decks] = await Promise.all([
+    const [routinesAll, topTodos, domains, learningTimes] = await Promise.all([
       Routine.findAll({
         where: { user_id: userId },
         attributes: ['id', 'done', 'day_of_week'],
@@ -55,22 +56,19 @@ exports.getStats = async (req, res) => {
         attributes: ['id', 'name', 'tag', 'progress', 'position'],
         order: [['position', 'ASC']],
       }),
-      FlashcardDeck.findAll({
+      Domain.findAll({
         where: { user_id: userId },
         order: [['position', 'ASC']],
-        attributes: ['id', 'name'],
+        attributes: ['id', 'name', 'type', 'minutes_per_day'],
+      }),
+      LearningTime.findAll({
+        where: {
+          user_id: userId,
+          date: isDay ? todayStr : { [Op.between]: [startWeekStr, endWeekStr] },
+        },
+        attributes: ['domain_id', 'date', 'minutes'],
       }),
     ]);
-
-    // Cartes de l'utilisateur, via ses collections : la table flashcard ne porte
-    // pas de user_id, la propriété passe par le deck.
-    const deckIds = decks.map((d) => d.id);
-    const cards = deckIds.length > 0
-      ? await Flashcard.findAll({
-          where: { deck_id: deckIds },
-          attributes: ['id', 'deck_id', 'next_review_at', 'last_reviewed_at'],
-        })
-      : [];
 
     const routinesToday = routinesAll.filter((r) => r.day_of_week === todayDay);
     const routinesTotalToday = routinesToday.length;
@@ -114,44 +112,45 @@ exports.getStats = async (req, res) => {
       routinesDoneToday = completionsToday.length;
     }
 
-    // Fenêtre de la période, pour dater les révisions.
-    const periodStart = isDay
-      ? new Date(`${todayStr}T00:00:00.000Z`)
-      : new Date(`${startWeekStr}T00:00:00.000Z`);
-    const periodEnd = isDay
-      ? new Date(`${todayStr}T23:59:59.999Z`)
-      : new Date(`${endWeekStr}T23:59:59.999Z`);
-    const now = new Date();
-
-    const isReviewedInPeriod = (card) => {
-      if (!card.last_reviewed_at) return false;
-      const at = new Date(card.last_reviewed_at);
-      return at >= periodStart && at <= periodEnd;
-    };
-    // Une carte jamais programmée (next_review_at null) est neuve : elle est due.
-    const isDue = (card) =>
-      card.next_review_at == null || new Date(card.next_review_at) <= now;
-
-    const deckGauges = decks.map((deck) => {
-      const deckCards = cards.filter((c) => c.deck_id === deck.id);
-      const reviewed = deckCards.filter(isReviewedInPeriod).length;
-      const due = deckCards.filter((c) => !isReviewedInPeriod(c) && isDue(c)).length;
-      const target = reviewed + due;
+    const todayDayName = DAY_NAMES[new Date().getDay()];
+    const domainGauges = domains.map((d) => {
+      const mins = d.minutes_per_day || {};
+      const expectedMinutes = isDay
+        ? (mins[todayDayName] || 0)
+        : DAY_NAMES.reduce((acc, day) => acc + (mins[day] || 0), 0);
+      const actualMinutes = learningTimes
+        .filter((lt) => lt.domain_id === d.id)
+        .reduce((acc, lt) => acc + (lt.minutes || 0), 0);
+      const percent = expectedMinutes > 0
+        ? Math.min(100, (actualMinutes / expectedMinutes) * 100)
+        : (actualMinutes > 0 ? 100 : 0);
+      const domainType =
+        d.type != null && String(d.type).toLowerCase() === 'pro' ? 'pro' : 'perso';
       return {
-        id: deck.id,
-        name: deck.name,
-        reviewed,
-        due,
-        target,
-        percent: target > 0 ? Math.min(100, (reviewed / target) * 100) : 0,
-        totalCards: deckCards.length,
+        id: d.id,
+        name: d.name,
+        type: domainType,
+        expectedMinutes,
+        actualMinutes,
+        percent,
       };
     });
 
-    const reviewed = deckGauges.reduce((acc, d) => acc + d.reviewed, 0);
-    const due = deckGauges.reduce((acc, d) => acc + d.due, 0);
-    // La charge de la période : ce qui a été révisé + ce qui reste à réviser.
-    const target = reviewed + due;
+    let persoMinutesProgress = 0;
+    let persoMinutesTarget = 0;
+    let proMinutesProgress = 0;
+    let proMinutesTarget = 0;
+    domainGauges.forEach((dg) => {
+      if (dg.type === 'pro') {
+        proMinutesProgress += dg.actualMinutes;
+        proMinutesTarget += dg.expectedMinutes;
+      } else {
+        persoMinutesProgress += dg.actualMinutes;
+        persoMinutesTarget += dg.expectedMinutes;
+      }
+    });
+    const totalMinutesProgress = persoMinutesProgress + proMinutesProgress;
+    const totalMinutesTarget = persoMinutesTarget + proMinutesTarget;
 
     const topTodosSorted = topTodos
       .sort((a, b) => (TAG_PRIORITY[a.tag] ?? 5) - (TAG_PRIORITY[b.tag] ?? 5))
@@ -163,13 +162,14 @@ exports.getStats = async (req, res) => {
 
     res.json({
       period: isDay ? 'day' : 'week',
-      flashcards: {
-        reviewed,
-        due,
-        target,
-        percent: target > 0 ? Math.min(100, Math.round((reviewed / target) * 100)) : 0,
-        totalCards: cards.length,
-        deckGauges,
+      apprentissage: {
+        persoMinutesProgress,
+        persoMinutesTarget,
+        proMinutesProgress,
+        proMinutesTarget,
+        totalMinutesProgress,
+        totalMinutesTarget,
+        domainGauges,
       },
       routines: {
         done: routinesDone,

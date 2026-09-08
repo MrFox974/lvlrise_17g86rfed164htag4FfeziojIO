@@ -60,7 +60,7 @@ function DeleteAccountModal({ isOpen, onClose, onSuccess }) {
         </h2>
         <p className="text-sm text-[var(--om-muted)] mb-4">
           Cette action est irréversible. Toutes vos données seront définitivement supprimées :
-          collections de cartes, routines, tâches et notes.
+          domaines, routines, to-do, cartes, notes, bibliothèque, etc.
         </p>
         <p className="text-sm text-[var(--om-muted)] mb-4">
           Si vous avez un abonnement payant, il sera automatiquement résilié.

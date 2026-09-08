@@ -5,18 +5,28 @@ import { useTheme } from '../hooks/useTheme';
 
 const MENU_ITEMS = [
   { to: '/home', label: "Vue d'ensemble", icon: 'ph-squares-four' },
-  { to: '/home/flashcards', label: 'FlashCards', icon: 'ph-cards-three' },
+  { to: '/home/apprentissage', label: 'Apprentissage', icon: 'ph-target' },
+  { to: '/home/productivite/carte-mentale', label: 'FlashCards', icon: 'ph-cards-three' },
+  { to: '/home/productivite/markdown', label: 'Bibliothèque', icon: 'ph-books' },
+  { to: '/home/productivite/notes', label: 'Notes', icon: 'ph-note-pencil' },
+  { to: '/home/productivite/debat', label: 'Débat', icon: 'ph-scales' },
   { to: '/home/routines', label: 'Routines', icon: 'ph-repeat' },
   { to: '/home/todos', label: 'To do list', icon: 'ph-check-square-offset' },
+  { to: '/home/domaines', label: 'Domaines', icon: 'ph-compass' },
   { to: '/plan', label: 'Plan', icon: 'ph-sparkle' },
   { to: '/settings', label: 'Paramètres', icon: 'ph-gear-six' },
 ];
 
 const DEMO_MENU_ITEMS = [
   { to: '/demo/home', label: "Vue d'ensemble", icon: 'ph-squares-four' },
-  { to: '/demo/home/flashcards', label: 'FlashCards', icon: 'ph-cards-three' },
+  { to: '/demo/home/apprentissage', label: 'Apprentissage', icon: 'ph-target' },
+  { to: '/demo/home/productivite/carte-mentale', label: 'FlashCards', icon: 'ph-cards-three' },
+  { to: '/demo/home/productivite/markdown', label: 'Bibliothèque', icon: 'ph-books' },
+  { to: '/demo/home/productivite/notes', label: 'Notes', icon: 'ph-note-pencil' },
+  { to: '/demo/home/productivite/debat', label: 'Débat', icon: 'ph-scales' },
   { to: '/demo/home/routines', label: 'Routines', icon: 'ph-repeat' },
   { to: '/demo/home/todos', label: 'To do list', icon: 'ph-check-square-offset' },
+  { to: '/demo/home/domaines', label: 'Domaines', icon: 'ph-compass' },
   { to: '/demo/plan', label: 'Plan', icon: 'ph-sparkle' },
 ];
 

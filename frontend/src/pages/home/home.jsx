@@ -5,7 +5,7 @@ import { fetchStats } from '../../utils/statsApi';
 import { TAG_ORDER } from '../../lib/tags';
 import {
   PeriodToggle,
-  ReviewCard,
+  GoalCard,
   PrioritiesCard,
   RoutinesCard,
 } from '../../components/overview/OverviewCards';
@@ -67,7 +67,7 @@ function HomeStats({ initialStats }) {
         .then((data) => {
           setStats({
             period: data.period,
-            flashcards: { ...data.flashcards },
+            apprentissage: { ...data.apprentissage },
             routines: { ...data.routines },
             topTodos: [...(data.topTodos || [])],
             periodDates: { ...data.periodDates },
@@ -91,10 +91,10 @@ function HomeStats({ initialStats }) {
       </div>
 
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
-        <ReviewCard
-          flashcards={stats?.flashcards}
+        <GoalCard
+          apprentissage={stats?.apprentissage}
           isDay={isDay}
-          sessionHref="/home/flashcards"
+          sessionHref="/home/apprentissage"
         />
         <div className="flex flex-col gap-3.5">
           <PrioritiesCard

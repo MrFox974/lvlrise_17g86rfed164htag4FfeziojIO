@@ -976,6 +976,12 @@ function TodosContent() {
           onClose={handleCloseNoteModal}
           onSave={handleSaveNoteFromTodo}
           onDelete={handleDeleteNoteFromTodo}
+          onViewInNotes={() => {
+            if (noteModalNote?.id) {
+              navigate('/home/productivite/notes');
+              handleCloseNoteModal();
+            }
+          }}
         />
       )}
 
@@ -1085,7 +1091,7 @@ function TodosContent() {
   );
 }
 
-function TodoNoteModal({ todo, note, loading, onClose, onSave, onDelete }) {
+function TodoNoteModal({ todo, note, loading, onClose, onSave, onDelete, onViewInNotes }) {
   const [title, setTitle] = useState(note?.title || todo?.name || '');
   const [content, setContent] = useState(note?.content || '');
   const [saving, setSaving] = useState(false);
@@ -1206,6 +1212,15 @@ function TodoNoteModal({ todo, note, loading, onClose, onSave, onDelete }) {
               Supprimer
             </button>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onViewInNotes?.();
+                }}
+                className="px-4 py-2 rounded-2xl border border-[var(--om-line)] text-[var(--om-muted)] text-sm font-medium hover:bg-[var(--om-surface-2)]"
+              >
+                Voir dans notes
+              </button>
               <button
                 type="button"
                 onClick={() => setIsEditingExisting(true)}

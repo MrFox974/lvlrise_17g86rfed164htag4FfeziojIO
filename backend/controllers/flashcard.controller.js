@@ -1270,7 +1270,6 @@ exports.reviewCard = async (req, res) => {
     card.repetitions = repetitions;
     card.lapses = lapses;
     card.next_review_at = nextDate;
-    card.last_reviewed_at = new Date();
     // « Bien » ou « Facile » : la carte cesse définitivement d'être neuve.
     if (q >= 3 && !card.learned_at) card.learned_at = new Date();
     if (rt != null) card.response_time_sec = rt;

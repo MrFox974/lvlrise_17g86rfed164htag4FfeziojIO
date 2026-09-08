@@ -10,7 +10,9 @@ const APP_VERSION = 'v-1.0-demo';
 const DEMO_ONBOARDING_SEEN_KEY = 'demo_onboarding_seen';
 
 const DESKTOP_NAV_ITEMS = [
-  { to: '/demo/home/flashcards', label: 'FlashCards', icon: 'cards-three' },
+  { to: '/demo/home/apprentissage', label: 'Apprentissage', icon: 'target' },
+  { to: '/demo/home/productivite/carte-mentale', label: 'FlashCards', icon: 'cards-three' },
+  { to: '/demo/home/productivite/markdown', label: 'Bibliothèque', icon: 'books' },
   { to: '/demo/home/routines', label: 'Routines', icon: 'repeat' },
   { to: '/demo/home/todos', label: 'To do list', icon: 'check-square-offset' },
   { to: '/demo/plan', label: 'Plan', icon: 'sparkle' },
@@ -54,9 +56,13 @@ function DemoLayout() {
   const handleBrainClose = useCallback(() => setBrainModalOpen(false), []);
   const handleBrainSelect = useCallback(
     (id) => {
-      if (id === 'flashcard') navigate('/demo/home/flashcards');
+      if (id === 'apprentissages') navigate('/demo/home/apprentissage');
+      else if (id === 'bibliotheque') navigate('/demo/home/productivite/markdown');
+      else if (id === 'flashcard') navigate('/demo/home/productivite/carte-mentale');
       else if (id === 'routines') navigate('/demo/home/routines');
       else if (id === 'todo') navigate('/demo/home/todos');
+      else if (id === 'note') navigate('/demo/home/productivite/notes');
+      else if (id === 'debat') navigate('/demo/home/productivite/debat');
     },
     [navigate]
   );
@@ -142,12 +148,12 @@ function DemoLayout() {
               <div className="om-card absolute right-0 top-full mt-2 w-60 p-2 z-50 animate-om-pop">
                 <div className="px-3 py-2 om-kicker">Mode démo</div>
                 <Link
-                  to="/demo/home/flashcards"
+                  to="/demo/home/domaines"
                   onClick={() => setUserMenuOpen(false)}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-sm font-medium text-[var(--om-text)] hover:bg-[var(--om-surface-2)] transition-colors"
                 >
-                  <i className="ph ph-cards-three text-[18px]" aria-hidden />
-                  FlashCards
+                  <i className="ph ph-compass text-[18px]" aria-hidden />
+                  Domaines
                 </Link>
                 <button
                   type="button"
@@ -221,7 +227,7 @@ function DemoLayout() {
           />
           <div className="om-card fixed bottom-32 md:bottom-28 left-4 right-4 md:left-auto md:right-6 z-[165] md:w-full md:max-w-sm p-5 flex flex-col gap-4">
             <p className="text-[var(--om-text)] text-[15px] leading-snug">
-              Les trois modules (FlashCards, Routines, To-do list) se trouvent derrière le
+              Tous les outils de productivité (Bibliothèque, FlashCard, Note) se trouvent derrière le
               cerveau, au centre du dock.
             </p>
             <p className="om-kicker">Explication 1/1</p>

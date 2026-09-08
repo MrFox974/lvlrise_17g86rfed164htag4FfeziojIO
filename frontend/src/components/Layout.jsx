@@ -11,7 +11,9 @@ import NavigationSkeleton from './skeletons/NavigationSkeleton';
 const APP_VERSION = 'v-1.0';
 
 const DESKTOP_NAV_ITEMS = [
-  { to: '/home/flashcards', label: 'FlashCards', icon: 'cards-three' },
+  { to: '/home/apprentissage', label: 'Apprentissage', icon: 'target' },
+  { to: '/home/productivite/carte-mentale', label: 'FlashCards', icon: 'cards-three' },
+  { to: '/home/productivite/markdown', label: 'Bibliothèque', icon: 'books' },
   { to: '/home/routines', label: 'Routines', icon: 'repeat' },
   { to: '/home/todos', label: 'To do list', icon: 'check-square-offset' },
   { to: '/plan', label: 'Plan', icon: 'sparkle' },
@@ -53,12 +55,20 @@ function Layout() {
     (id) => {
       if (id === 'admin') {
         navigate('/admin');
+      } else if (id === 'apprentissages') {
+        navigate('/home/apprentissage');
+      } else if (id === 'bibliotheque') {
+        navigate('/home/productivite/markdown');
       } else if (id === 'flashcard') {
-        navigate('/home/flashcards');
+        navigate('/home/productivite/carte-mentale');
       } else if (id === 'routines') {
         navigate('/home/routines');
       } else if (id === 'todo') {
         navigate('/home/todos');
+      } else if (id === 'note') {
+        navigate('/home/productivite/notes');
+      } else if (id === 'debat') {
+        navigate('/home/productivite/debat');
       }
     },
     [navigate]
@@ -173,12 +183,12 @@ function Layout() {
                       Routines
                     </Link>
                     <Link
-                      to="/home/flashcards"
+                      to="/home/domaines"
                       onClick={() => setUserMenuOpen(false)}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-sm font-medium text-[var(--om-text)] hover:bg-[var(--om-surface-2)] transition-colors"
                     >
-                      <i className="ph ph-cards-three text-[18px]" aria-hidden />
-                      FlashCards
+                      <i className="ph ph-squares-four text-[18px]" aria-hidden />
+                      Domaines
                     </Link>
                     <Link
                       to="/settings"

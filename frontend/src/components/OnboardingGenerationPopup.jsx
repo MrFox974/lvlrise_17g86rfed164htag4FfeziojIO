@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getGenerationStatus, getOnboardingStatus, cancelGeneration, resumeGeneration } from '../utils/onboardingApi';
+import { fetchDomains, getDomainGenerationStatus, cancelDomainGeneration, resumeDomainGeneration } from '../utils/markdownApi';
 
 /**
  * Section fixe "Configuration de votre espace en cours" affichée juste en dessous du header.
@@ -18,18 +19,69 @@ function OnboardingGenerationPopup() {
   const [generating, setGenerating] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [shouldShow, setShouldShow] = useState(false); // Ne s'affiche que si l'onboarding n'est pas terminé
+  const [generatingDomainId, setGeneratingDomainId] = useState(null); // ID du domaine en génération (si génération individuelle)
+  const hasCheckedDomainsRef = useRef(false); // Pour éviter les vérifications répétées des domaines
   const lastProgressRef = useRef(0); // Pour détecter si la progression stagne
   const stuckCheckTimeoutRef = useRef(null); // Timeout pour vérifier si bloqué
   const autoResumeInProgressRef = useRef(false); // Éviter plusieurs reprises simultanées
   const lastAutoResumeRef = useRef(0); // Dernière reprise auto (throttle)
 
-  // Vérifier le statut de la génération d'onboarding au chargement
+  // Affichage immédiat quand l'utilisateur lance "Générer le domaine" (sans refresh)
+  useEffect(() => {
+    const handler = (event) => {
+      try {
+        const domainId = event?.detail?.domainId;
+        if (!domainId) return;
+        if (!location.pathname.includes('/markdown')) return;
+
+        setCompleted(false);
+        setShowSuccessPopup(false);
+        setGeneratingDomainId(domainId);
+        setGenerating(true);
+        setShouldShow(true);
+        setProgress(0);
+        setStep('Initialisation...');
+        setLog([]);
+        // Permettre au polling de prendre le relais immédiatement
+        hasCheckedDomainsRef.current = true;
+      } catch (err) {
+        console.warn('[OnboardingGenerationPopup] Erreur événement génération:', err);
+      }
+    };
+
+    window.addEventListener('markdown:domain-generation-started', handler);
+    return () => window.removeEventListener('markdown:domain-generation-started', handler);
+  }, [location.pathname]);
+
+  // Vérifier le statut de l'onboarding et des domaines en génération au chargement
   useEffect(() => {
     const checkGenerationStatus = async () => {
       try {
         console.log('[OnboardingGenerationPopup] Vérification du statut de génération...');
         
-        // Génération lancée à la fin de l'entretien d'onboarding.
+        // PRIORITÉ 1 : Vérifier s'il y a un domaine en génération (génération individuelle)
+        // Seulement sur les pages markdown ET seulement une fois pour éviter les appels répétés
+        if (location.pathname.includes('/markdown') && !hasCheckedDomainsRef.current && !generatingDomainId) {
+          hasCheckedDomainsRef.current = true;
+          try {
+            const domains = await fetchDomains();
+            const generatingDomain = domains.find(d => d.generation_status === 'generating');
+            if (generatingDomain) {
+              console.log('[OnboardingGenerationPopup] Domaine en génération détecté:', generatingDomain.id);
+              setGeneratingDomainId(generatingDomain.id);
+              setGenerating(true);
+              setShouldShow(true);
+              setProgress(generatingDomain.generation_progress || 0);
+              setStep(generatingDomain.generation_step || 'En cours...');
+              setLog(generatingDomain.generation_log || []);
+              return; // On a trouvé une génération de domaine, pas besoin de vérifier l'onboarding
+            }
+          } catch (domainErr) {
+            console.warn('[OnboardingGenerationPopup] Erreur lors de la vérification des domaines:', domainErr);
+          }
+        }
+        
+        // PRIORITÉ 2 : Vérifier l'onboarding (génération lors de la première connexion)
         // Ne pas afficher si le popup de succès a déjà été affiché
         const hasShownSuccess = localStorage.getItem('onboarding_success_shown');
         if (hasShownSuccess === 'true') {
@@ -47,6 +99,7 @@ function OnboardingGenerationPopup() {
           console.log('[OnboardingGenerationPopup] Statut de génération onboarding détaillé:', genStatus);
           if (!genStatus.completed && (genStatus.step !== null && genStatus.step !== undefined || genStatus.progress !== null && genStatus.progress !== undefined)) {
             console.log('[OnboardingGenerationPopup] Génération onboarding en cours détectée, affichage de la section');
+            setGeneratingDomainId(null); // Pas de domaine individuel
             setGenerating(true);
             setShouldShow(true);
             setProgress(genStatus.progress ?? 0);
@@ -73,6 +126,7 @@ function OnboardingGenerationPopup() {
         // Si isGenerating est true, afficher immédiatement la section
         if (status.isGenerating) {
           console.log('[OnboardingGenerationPopup] isGenerating=true, affichage immédiat de la section');
+          setGeneratingDomainId(null); // Pas de domaine individuel
           setGenerating(true);
           setShouldShow(true);
           setProgress(0);
@@ -106,6 +160,8 @@ function OnboardingGenerationPopup() {
       checkGenerationStatus();
     } else {
       // Si on quitte les pages /home, réinitialiser l'état et le flag de vérification
+      hasCheckedDomainsRef.current = false;
+      setGeneratingDomainId(null);
       setGenerating(false);
       setShouldShow(false);
     }
@@ -113,7 +169,72 @@ function OnboardingGenerationPopup() {
 
   const poll = useCallback(async () => {
     try {
-      {
+      // Si on génère un domaine individuel, utiliser getDomainGenerationStatus
+      if (generatingDomainId) {
+        const status = await getDomainGenerationStatus(generatingDomainId);
+        const currentProgress = status.generation_progress || 0;
+        setProgress(currentProgress);
+        // Ne jamais afficher "error" ou un message négatif : garder neutre
+        setStep(
+          status.generation_status === 'error' || status.generation_step === 'error'
+            ? 'En cours...'
+            : (status.generation_step || 'En cours...')
+        );
+        setLog(status.generation_log || []);
+
+        // Erreur ou bloqué : reprise automatique sans afficher de message
+        if (status.generation_status === 'error') {
+          const now = Date.now();
+          if (!autoResumeInProgressRef.current && now - lastAutoResumeRef.current > 15000) {
+            autoResumeInProgressRef.current = true;
+            lastAutoResumeRef.current = now;
+            resumeDomainGeneration(generatingDomainId).catch(() => {}).finally(() => {
+              autoResumeInProgressRef.current = false;
+            });
+          }
+          setGenerating(true);
+          setShouldShow(true);
+          return;
+        }
+
+        // Détecter si la génération est bloquée (progression qui ne change pas pendant 30 secondes) → reprise auto
+        if (status.generation_status === 'generating') {
+          if (currentProgress === lastProgressRef.current && currentProgress > 0 && currentProgress < 100) {
+            if (!stuckCheckTimeoutRef.current) {
+              stuckCheckTimeoutRef.current = setTimeout(() => {
+                if (currentProgress === lastProgressRef.current && currentProgress > 0 && currentProgress < 100) {
+                  const now = Date.now();
+                  if (!autoResumeInProgressRef.current && now - lastAutoResumeRef.current > 15000) {
+                    autoResumeInProgressRef.current = true;
+                    lastAutoResumeRef.current = now;
+                    resumeDomainGeneration(generatingDomainId).catch(() => {}).finally(() => {
+                      autoResumeInProgressRef.current = false;
+                    });
+                  }
+                }
+                stuckCheckTimeoutRef.current = null;
+              }, 30000);
+            }
+          } else {
+            if (stuckCheckTimeoutRef.current) {
+              clearTimeout(stuckCheckTimeoutRef.current);
+              stuckCheckTimeoutRef.current = null;
+            }
+            lastProgressRef.current = currentProgress;
+          }
+
+          setGenerating(true);
+          setShouldShow(true);
+        } else {
+          setCompleted(true);
+          setGenerating(false);
+          if (generating) {
+            setShowSuccessPopup(true);
+          }
+          return;
+        }
+      } else {
+        // Onboarding : getGenerationStatus
         const data = await getGenerationStatus();
         const currentProgress = data.progress ?? 0;
         setProgress(currentProgress);
@@ -183,7 +304,7 @@ function OnboardingGenerationPopup() {
       console.warn('Erreur lors du polling (génération continue côté backend):', err);
       // Ne pas mettre completed à true pour permettre la reprise du polling
     }
-  }, [generating]);
+  }, [generating, generatingDomainId]);
 
   useEffect(() => {
     // Ne pas poller si la génération est terminée
@@ -203,7 +324,62 @@ function OnboardingGenerationPopup() {
         clearTimeout(stuckCheckTimeoutRef.current);
       }
     };
-  }, [location.pathname, completed, shouldShow, generating, poll]);
+  }, [location.pathname, completed, shouldShow, generating, generatingDomainId, poll]);
+  
+  // Vérifier périodiquement s'il y a de nouveaux domaines en génération (pour détecter les nouveaux clics sur "Créer un domaine avec l'IA")
+  // Seulement sur les pages markdown et si aucune génération n'est déjà en cours
+  // DÉSACTIVÉ : Cette vérification est déjà faite dans MarkdownHome.jsx, pas besoin de la dupliquer ici
+  // useEffect(() => {
+  //   // Ne pas vérifier si :
+  //   // - Une génération est déjà en cours
+  //   // - On n'est pas sur une page markdown
+  //   // - La génération est terminée
+  //   if (completed || generatingDomainId || !location.pathname.includes('/markdown')) {
+  //     return;
+  //   }
+  //   
+  //   let isMounted = true;
+  //   let checkCount = 0;
+  //   const MAX_CHECKS = 30; // Maximum 30 vérifications (60 secondes au total)
+  //   
+  //   const checkForNewGeneratingDomains = async () => {
+  //     if (!isMounted || checkCount >= MAX_CHECKS) {
+  //       return;
+  //     }
+  //     checkCount++;
+  //     
+  //     try {
+  //       const domains = await fetchDomains();
+  //       if (!isMounted) return;
+  //       
+  //       const generatingDomain = domains.find(d => d.generation_status === 'generating');
+  //       if (generatingDomain && generatingDomain.id !== generatingDomainId) {
+  //         console.log('[OnboardingGenerationPopup] Nouveau domaine en génération détecté:', generatingDomain.id);
+  //         setGeneratingDomainId(generatingDomain.id);
+  //         setGenerating(true);
+  //         setShouldShow(true);
+  //         setProgress(generatingDomain.generation_progress || 0);
+  //         setStep(generatingDomain.generation_step || 'En cours...');
+  //         setLog(generatingDomain.generation_log || []);
+  //         return; // Arrêter la vérification une fois qu'on a trouvé un domaine
+  //       }
+  //     } catch (err) {
+  //       console.warn('[OnboardingGenerationPopup] Erreur lors de la vérification des nouveaux domaines:', err);
+  //     }
+  //   };
+  //   
+  //   // Vérifier toutes les 2 secondes, mais seulement pendant 60 secondes maximum
+  //   const checkInterval = setInterval(checkForNewGeneratingDomains, 2000);
+  //   
+  //   // Vérifier immédiatement au montage
+  //   checkForNewGeneratingDomains();
+  //   
+  //   return () => {
+  //     isMounted = false;
+  //     clearInterval(checkInterval);
+  //   };
+  // }, [completed, generatingDomainId, location.pathname]);
+
   // Pop-up "La génération est terminée" 5 secondes puis disparition
   // Ne s'affiche qu'une seule fois dans la vie de l'utilisateur (pendant l'onboarding)
   useEffect(() => {
@@ -232,9 +408,12 @@ function OnboardingGenerationPopup() {
   }, []);
 
   const stepLabel = {
+    domains: 'Domaines',
     flashcards: 'Flashcards',
     todos: 'Tâches',
+    note: 'Note',
     routines: 'Routines',
+    bibliotheque: 'Bibliothèque',
     done: 'Terminé',
     starting: 'Démarrage',
   };
@@ -279,7 +458,7 @@ function OnboardingGenerationPopup() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm md:text-base font-medium text-[var(--om-text)] mb-2 md:mb-2.5">
-                Configuration de votre espace en cours
+                {generatingDomainId ? 'Génération du domaine en cours' : 'Configuration de votre espace en cours'}
               </p>
               <div className="flex items-center gap-2.5 md:gap-3">
                 {/* Barre de progression */}
@@ -302,10 +481,16 @@ function OnboardingGenerationPopup() {
                 type="button"
                 onClick={async () => {
                   try {
-                    await cancelGeneration();
+                    if (generatingDomainId) {
+                      await cancelDomainGeneration(generatingDomainId);
+                    } else {
+                      await cancelGeneration();
+                    }
                     setGenerating(false);
                     setShouldShow(false);
                     setCompleted(true);
+                    setGeneratingDomainId(null);
+                    hasCheckedDomainsRef.current = false;
                   } catch (err) {
                     // Ne pas afficher d'erreur à l'utilisateur
                   }

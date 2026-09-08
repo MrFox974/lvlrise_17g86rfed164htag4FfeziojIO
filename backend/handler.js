@@ -11,6 +11,18 @@ const serverlessHandler = serverless(app, {
 module.exports.handler = async (event, context) => {
   try {
     // Invocation interne (worker) : pas de requestContext = payload custom (Lambda Invoke), pas une requête HTTP
+    if (event && !event.requestContext && event.internal === 'run-domain-generation' && event.domainId != null) {
+      await app.dbReadyPromise;
+      const { runDomainGenerationJob } = require('./jobs/markdown-generation-job');
+      await runDomainGenerationJob(Number(event.domainId));
+      return { statusCode: 200, body: '' };
+    }
+    if (event && !event.requestContext && event.internal === 'run-domain-generation-resume' && event.domainId != null) {
+      await app.dbReadyPromise;
+      const { runDomainGenerationResumeJob } = require('./jobs/markdown-generation-job');
+      await runDomainGenerationResumeJob(Number(event.domainId));
+      return { statusCode: 200, body: '' };
+    }
     if (event && !event.requestContext && event.internal === 'run-flashcard-generation' && event.jobId != null) {
       await app.dbReadyPromise;
       const { runFlashcardGenerationJob } = require('./jobs/flashcard-generation-job');

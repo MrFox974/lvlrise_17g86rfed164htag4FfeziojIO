@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 
 /**
- * Modal affichée en mode démo lorsqu'une action nécessite un compte (créer une routine, une tâche, une carte, etc.).
+ * Modal affichée en mode démo lorsqu'une action nécessite un compte (Parcourir, créer domaine, routine, flashcard, etc.).
  * Message : "Vous devez vous connecter pour accéder à toutes les fonctionnalités."
  */
 function DemoBlockModal({ isOpen, onClose }) {

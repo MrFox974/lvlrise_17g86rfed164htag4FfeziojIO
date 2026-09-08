@@ -3,18 +3,18 @@ import { Link, useLocation } from 'react-router-dom';
 /**
  * Dock de navigation mobile.
  *
- * La vue d'ensemble et les trois modules de l'application encadrent le bouton
- * cerveau, qui sert d'accès rapide.
+ * Les quatre destinations les plus fréquentes encadrent le bouton cerveau,
+ * qui reste le point d'entrée unique vers les outils de productivité.
  * Sur desktop la navigation reste dans l'en-tête : le dock est masqué.
  */
 function dockItems(base) {
   return [
     { to: `${base}/home`, label: 'Vue', icon: 'squares-four', exact: true },
-    { to: `${base}/home/flashcards`, label: 'Cartes', icon: 'cards-three' },
+    { to: `${base}/home/apprentissage`, label: 'Apprendre', icon: 'target' },
+    { to: `${base}/home/productivite/carte-mentale`, label: 'Cartes', icon: 'cards-three' },
     // ph-repeat : la même icône désigne les routines dans l'en-tête desktop,
     // le menu et l'accès rapide — le dock ne fait pas exception.
     { to: `${base}/home/routines`, label: 'Routines', icon: 'repeat' },
-    { to: `${base}/home/todos`, label: 'To do', icon: 'check-square-offset' },
   ];
 }
 

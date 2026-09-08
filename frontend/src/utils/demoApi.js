@@ -7,81 +7,112 @@ function delay(ms = 300) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Charge de révision de la période, calculée de façon synchrone pour que le
- * cadran réagisse au clic Jour/Semaine sans attendre le fetch.
- */
-export function getDemoFlashcardsSync(period) {
-  const data = getDemoData();
-  return buildFlashcardsStats(data, period || 'day');
-}
-
-/** Fenêtre [début, fin] de la période, en heure locale. */
-function getPeriodRange(period) {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  if (period === 'week') {
-    const day = start.getDay();
-    start.setDate(start.getDate() - (day === 0 ? 6 : day - 1));
-  }
-  const end = new Date(start);
-  end.setDate(start.getDate() + (period === 'week' ? 6 : 0));
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
-}
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 /**
- * Cartes révisées sur la période et cartes encore dues, par collection.
- * Une carte jamais programmée (next_review_at absent) est neuve : elle est due.
+ * Construit l'objet apprentissage (perso/pro progress et target) depuis les domaines, comme en mode connecté.
+ * Jour : expectedMinutes = minutes_per_day[jour actuel] pour chaque domaine, actualMinutes depuis les gauges.
+ * Semaine : expectedMinutes = somme sur 7 jours de minutes_per_day pour chaque domaine, actualMinutes = 7× jour.
  */
-function buildFlashcardsStats(data, period) {
-  const decks = data.flashcardDecks || [];
-  const { start, end } = getPeriodRange(period);
-  const now = new Date();
-
-  const deckGauges = decks.map((deck) => {
-    const cards = getFlashcardCards(data, deck.id);
-    const reviewedCards = cards.filter((c) => {
-      if (!c.last_reviewed_at) return false;
-      const at = new Date(c.last_reviewed_at);
-      return at >= start && at <= end;
-    });
-    const reviewedIds = new Set(reviewedCards.map((c) => c.id));
-    const dueCards = cards.filter(
-      (c) => !reviewedIds.has(c.id) && (!c.next_review_at || new Date(c.next_review_at) <= now)
-    );
-    const reviewed = reviewedCards.length;
-    const due = dueCards.length;
-    const target = reviewed + due;
+function buildApprentissageFromDomains(domains, domainGauges, period) {
+  if (!Array.isArray(domains) || domains.length === 0) {
     return {
-      id: deck.id,
-      name: deck.name,
-      reviewed,
-      due,
-      target,
-      percent: target > 0 ? Math.min(100, (reviewed / target) * 100) : 0,
-      totalCards: cards.length,
+      persoMinutesProgress: 0,
+      persoMinutesTarget: 0,
+      proMinutesProgress: 0,
+      proMinutesTarget: 0,
+      totalMinutesProgress: 0,
+      totalMinutesTarget: 0,
+      domainGauges: [],
     };
+  }
+  
+  const todayDay = new Date().getDay();
+  const todayDayName = DAY_NAMES[todayDay];
+  
+  // Créer un map des gauges par id pour récupérer actualMinutes rapidement
+  const gaugesById = {};
+  if (Array.isArray(domainGauges)) {
+    domainGauges.forEach((g) => {
+      gaugesById[String(g.id)] = g;
+    });
+  }
+  
+  let persoMinutesProgress = 0;
+  let persoMinutesTarget = 0;
+  let proMinutesProgress = 0;
+  let proMinutesTarget = 0;
+  const gaugesForPeriod = [];
+  
+  const WEEKEND_DAYS = new Set(['saturday', 'sunday']);
+  const WEEKEND_RATIO = 0.6;
+
+  domains.forEach((domain) => {
+    const mins = domain.minutes_per_day || {};
+    const domainType = domain.type != null && String(domain.type).toLowerCase() === 'pro' ? 'pro' : 'perso';
+    const gauge = gaugesById[String(domain.id)];
+    const todayExpected = mins[todayDayName] || 0;
+    const rawWeekExpected = DAY_NAMES.reduce((acc, day) => acc + (mins[day] || 0), 0);
+    // Si objectifs uniformes (rawWeekExpected ≈ 7 × todayExpected), appliquer ratio week-end
+    // pour que jour vs semaine produise des % différents (stroke-dasharray qui bouge)
+    const isUniform = todayExpected > 0 && Math.abs(rawWeekExpected - 7 * todayExpected) < 1;
+    const expectedMinutes = period === 'week'
+      ? isUniform
+        ? Math.round(5 * todayExpected + 2 * todayExpected * WEEKEND_RATIO)
+        : rawWeekExpected
+      : todayExpected;
+    
+    // actualMinutes : depuis les gauges (représentent "aujourd'hui")
+    const actualMinutes = gauge?.actualMinutes ?? 0;
+    const actualMinutesForPeriod = period === 'week' ? actualMinutes * 7 : actualMinutes;
+    
+    if (domainType === 'pro') {
+      proMinutesProgress += actualMinutesForPeriod;
+      proMinutesTarget += expectedMinutes;
+    } else {
+      persoMinutesProgress += actualMinutesForPeriod;
+      persoMinutesTarget += expectedMinutes;
+    }
+    
+    gaugesForPeriod.push({
+      id: domain.id,
+      name: domain.name,
+      type: domainType,
+      expectedMinutes,
+      actualMinutes: actualMinutesForPeriod,
+      percent: expectedMinutes > 0
+        ? Math.min(100, (actualMinutesForPeriod / expectedMinutes) * 100)
+        : (actualMinutesForPeriod > 0 ? 100 : 0),
+    });
   });
-
-  const reviewed = deckGauges.reduce((acc, d) => acc + d.reviewed, 0);
-  const due = deckGauges.reduce((acc, d) => acc + d.due, 0);
-  const target = reviewed + due;
-
+  
+  const totalMinutesProgress = persoMinutesProgress + proMinutesProgress;
+  const totalMinutesTarget = persoMinutesTarget + proMinutesTarget;
+  
   return {
-    reviewed,
-    due,
-    target,
-    percent: target > 0 ? Math.min(100, Math.round((reviewed / target) * 100)) : 0,
-    totalCards: deckGauges.reduce((acc, d) => acc + d.totalCards, 0),
-    deckGauges,
+    persoMinutesProgress,
+    persoMinutesTarget,
+    proMinutesProgress,
+    proMinutesTarget,
+    totalMinutesProgress,
+    totalMinutesTarget,
+    domainGauges: gaugesForPeriod,
   };
 }
 
 /**
- * Récupère les statistiques en mode démo. Le bloc flashcards est recalculé à
- * chaque appel depuis les cartes stockées, pour refléter les révisions faites
- * pendant la démo.
+ * Calcule apprentissage de façon synchrone (pour mise à jour immédiate du stroke-dasharray).
+ */
+export function getDemoApprentissageSync(period) {
+  const data = getDemoData();
+  const domains = data.domains || [];
+  const gauges = data.stats?.day?.apprentissage?.domainGauges || [];
+  return buildApprentissageFromDomains(domains, gauges, period || 'day');
+}
+
+/**
+ * Récupère les statistiques en mode démo. Les cercles perso/pro sont calculés depuis les domaines,
+ * comme en mode connecté : jour = somme des minutes_per_day[jour actuel], semaine = somme sur 7 jours.
  */
 export const fetchDemoStats = async (options = {}) => {
   await delay();
@@ -89,17 +120,149 @@ export const fetchDemoStats = async (options = {}) => {
   const period = options.period || 'day';
   const stored = data.stats?.[period] || data.stats?.day || {};
 
+  const domains = data.domains || [];
+  const gauges = data.stats?.day?.apprentissage?.domainGauges || [];
+
+  // Toujours calculer apprentissage depuis les domaines + gauges pour refléter les mises à jour
+  // des gauges (recordDemoLearningTime) et éviter que les cercles se bloquent.
+  const apprentissage = buildApprentissageFromDomains(domains, gauges, period);
+
   return {
     ...stored,
-    flashcards: buildFlashcardsStats(data, period),
+    apprentissage,
     routines: stored.routines ?? { done: 0, total: 0 },
   };
+};
+
+function sumMinutesByType(domainGauges, type) {
+  if (!Array.isArray(domainGauges)) return 0;
+  return domainGauges
+    .filter((d) => (d.type || 'perso') === type)
+    .reduce((acc, d) => acc + (d.actualMinutes ?? 0), 0);
+}
+
+function sumTargetsByType(domainGauges, type) {
+  if (!Array.isArray(domainGauges)) return 0;
+  return domainGauges
+    .filter((d) => (d.type || 'perso') === type)
+    .reduce((acc, d) => acc + (d.expectedMinutes ?? 0), 0);
+}
+
+function buildDailyProgressFromGauges(domainGauges) {
+  const perso = sumMinutesByType(domainGauges, 'perso');
+  const pro = sumMinutesByType(domainGauges, 'pro');
+  const persoTarget = sumTargetsByType(domainGauges, 'perso');
+  const proTarget = sumTargetsByType(domainGauges, 'pro');
+  return { perso, pro, persoTarget, proTarget };
+}
+
+/**
+ * Détermine de façon déterministe si une date doit être "validée" (90% des cas) ou "presque" (10%) pour la démo.
+ */
+function isDateValidatedForDemo(dateStr) {
+  let h = 0;
+  for (let i = 0; i < dateStr.length; i++) h = (h * 31 + dateStr.charCodeAt(i)) % 100;
+  return h < 90;
+}
+
+const DEMO_PERSO_TARGET = 180;
+const DEMO_PRO_TARGET = 195;
+
+/**
+ * Récupère la progression quotidienne (minutes perso/pro et objectifs) pour le calendrier en mode démo.
+ * Pour la démo : ~90 % des jours passés affichent un diagramme validé (icône check), ~10 % presque validé.
+ * Même format que fetchDomainDailyProgress.
+ */
+export const fetchDemoDomainDailyProgress = async (start, end) => {
+  await delay();
+  const data = getDemoData();
+  const byDate = data.learningDailyProgressByDate || {};
+  const today = new Date().toISOString().slice(0, 10);
+  const gauges = data.stats?.day?.apprentissage?.domainGauges;
+  const { persoTarget, proTarget } = gauges
+    ? buildDailyProgressFromGauges(gauges)
+    : { persoTarget: DEMO_PERSO_TARGET, proTarget: DEMO_PRO_TARGET };
+
+  const out = {};
+  const startD = new Date(start + 'T12:00:00');
+  const endD = new Date(end + 'T12:00:00');
+  for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().slice(0, 10);
+    if (byDate[dateStr]) {
+      out[dateStr] = byDate[dateStr];
+    } else if (dateStr < today) {
+      const validated = isDateValidatedForDemo(dateStr);
+      out[dateStr] = validated
+        ? { perso: persoTarget, pro: proTarget, persoTarget, proTarget }
+        : {
+            perso: Math.floor(persoTarget * 0.85),
+            pro: Math.floor(proTarget * 0.85),
+            persoTarget,
+            proTarget,
+          };
+    }
+  }
+  return out;
+};
+
+/**
+ * Enregistre le temps d'apprentissage en mode démo : met à jour domainGauges + stats + calendrier (localStorage).
+ */
+export const recordDemoLearningTime = async (domainId, date, minutes) => {
+  await delay();
+  const data = getDemoData();
+
+  const idStr = String(domainId);
+  const safeMinutes = Math.max(0, Number(minutes) || 0);
+
+  const day = data.stats?.day || {};
+  const week = data.stats?.week || {};
+  const dayApp = day.apprentissage || {};
+  const weekApp = week.apprentissage || {};
+
+  const updateGauges = (gauges) => {
+    if (!Array.isArray(gauges)) return gauges;
+    return gauges.map((g) => (String(g?.id) === idStr ? { ...g, actualMinutes: safeMinutes } : g));
+  };
+
+  const dayGauges = updateGauges(dayApp.domainGauges);
+  const weekGauges = updateGauges(weekApp.domainGauges);
+
+  const updateTotals = (app, gauges) => {
+    const persoMinutesProgress = sumMinutesByType(gauges, 'perso');
+    const proMinutesProgress = sumMinutesByType(gauges, 'pro');
+    const persoMinutesTarget = sumTargetsByType(gauges, 'perso');
+    const proMinutesTarget = sumTargetsByType(gauges, 'pro');
+    return {
+      ...app,
+      persoMinutesProgress,
+      proMinutesProgress,
+      totalMinutesProgress: persoMinutesProgress + proMinutesProgress,
+      persoMinutesTarget,
+      proMinutesTarget,
+      totalMinutesTarget: persoMinutesTarget + proMinutesTarget,
+      domainGauges: gauges,
+    };
+  };
+
+  data.stats = data.stats || {};
+  data.stats.day = { ...day, apprentissage: updateTotals(dayApp, dayGauges) };
+  data.stats.week = { ...week, apprentissage: updateTotals(weekApp, weekGauges) };
+
+  // Calendrier : on enregistre au moins la journée courante (ou la date passée)
+  if (!data.learningDailyProgressByDate || typeof data.learningDailyProgressByDate !== 'object') {
+    data.learningDailyProgressByDate = {};
+  }
+  data.learningDailyProgressByDate[date] = buildDailyProgressFromGauges(dayGauges);
+
+  saveDemoData(data);
+  return data.learningDailyProgressByDate[date];
 };
 
 /**
  * Récupère les todos en mode démo depuis localStorage
  */
-export const fetchDemoTodos = async () => {
+export const fetchDemoTodos = async (options = {}) => {
   await delay();
   const data = getDemoData();
   return data.todos || { active: [] };
@@ -198,16 +361,6 @@ export const fetchDemoRoutines = async (dayOfWeek, options = {}) => {
     done: Array.isArray(doneIds) ? doneIds.includes(r.id) : false,
   }));
 };
-
-/**
- * Détermine de façon déterministe si une date passée doit apparaître « validée »
- * (90 % des cas) ou « presque » (10 %) dans le calendrier des routines de démo.
- */
-function isDateValidatedForDemo(dateStr) {
-  let h = 0;
-  for (let i = 0; i < dateStr.length; i++) h = (h * 31 + dateStr.charCodeAt(i)) % 100;
-  return h < 90;
-}
 
 export const fetchDemoRoutinesCalendar = async (start, end) => {
   await delay();
@@ -643,12 +796,285 @@ export const reviewDemoCard = async (deckId, cardId, quality, responseTimeSec, m
   const nextReview = new Date();
   nextReview.setDate(nextReview.getDate() + card.interval_days);
   card.next_review_at = nextReview.toISOString();
-  card.last_reviewed_at = new Date().toISOString();
   if (responseTimeSec !== undefined) card.response_time_sec = responseTimeSec;
   if (mistakeReason !== undefined) card.mistake_reason = mistakeReason;
   
   saveDemoData(data);
   return { card, nextReview: card.next_review_at };
+};
+
+/**
+ * Récupère les domaines en mode démo depuis localStorage
+ */
+export const fetchDemoDomains = async () => {
+  await delay();
+  const data = getDemoData();
+  return data.domains || [];
+};
+
+/**
+ * Crée un domaine en mode démo
+ */
+export const createDemoDomain = async (name, minutesPerDay = {}, type = 'perso') => {
+  await delay();
+  const data = getDemoData();
+  const domainType = type != null && String(type).toLowerCase() === 'pro' ? 'pro' : 'perso';
+  const newDomain = {
+    id: Date.now(),
+    name: name.trim(),
+    minutes_per_day: minutesPerDay,
+    type: domainType,
+  };
+  if (!data.domains) {
+    data.domains = [];
+  }
+  data.domains.push(newDomain);
+  saveDemoData(data);
+  return newDomain;
+};
+
+/**
+ * Met à jour un domaine en mode démo
+ */
+export const updateDemoDomain = async (id, { name, type, minutes_per_day }) => {
+  await delay();
+  const data = getDemoData();
+  if (!data.domains) {
+    data.domains = [];
+  }
+  const domain = data.domains.find((d) => String(d.id) === String(id));
+  if (!domain) throw new Error('Domaine introuvable');
+  if (name !== undefined) domain.name = name.trim();
+  if (type !== undefined) {
+    domain.type = type != null && String(type).toLowerCase() === 'pro' ? 'pro' : 'perso';
+  }
+  if (minutes_per_day !== undefined) domain.minutes_per_day = minutes_per_day;
+  saveDemoData(data);
+  return domain;
+};
+
+/**
+ * Supprime un domaine en mode démo
+ */
+export const deleteDemoDomain = async (id) => {
+  await delay();
+  const data = getDemoData();
+  if (data.domains) {
+    data.domains = data.domains.filter((d) => String(d.id) !== String(id));
+  }
+  saveDemoData(data);
+};
+
+/**
+ * Réordonne les domaines en mode démo
+ */
+export const reorderDemoDomains = async (domainIds) => {
+  await delay();
+  const data = getDemoData();
+  if (!data.domains) {
+    data.domains = [];
+  }
+  const byId = Object.fromEntries(data.domains.map((d) => [String(d.id), d]));
+  const reordered = domainIds
+    .map((id) => byId[String(id)])
+    .filter(Boolean);
+  data.domains = reordered;
+  saveDemoData(data);
+  return reordered;
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DÉBATS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const findDemoDebate = (data, debateId) =>
+  (data.debates || []).find((d) => String(d.id) === String(debateId));
+
+const findDemoNode = (debate, nodeId) => {
+  if (!debate) return null;
+  if (String(debate.general?.id) === String(nodeId)) return debate.general;
+  return (debate.subs || []).find((n) => String(n.id) === String(nodeId)) || null;
+};
+
+const findDemoDebateByNode = (data, nodeId) =>
+  (data.debates || []).find((d) => findDemoNode(d, nodeId));
+
+const findDemoArgument = (data, argumentId) => {
+  for (const debate of data.debates || []) {
+    const nodes = [debate.general, ...(debate.subs || [])].filter(Boolean);
+    for (const node of nodes) {
+      const arg = (node.arguments || []).find((a) => String(a.id) === String(argumentId));
+      if (arg) return { debate, node, arg };
+    }
+  }
+  return {};
+};
+
+export const fetchDemoDebates = async () => {
+  await delay();
+  const data = getDemoData();
+  return data.debates || [];
+};
+
+export const fetchDemoDebate = async (debateId) => {
+  await delay();
+  const data = getDemoData();
+  return findDemoDebate(data, debateId) || null;
+};
+
+export const createDemoDebate = async ({ title, question, desc }) => {
+  await delay();
+  const data = getDemoData();
+  const debates = data.debates || [];
+  const id = Date.now();
+  const debate = {
+    id,
+    title: title.trim(),
+    question: (question || '').trim() || 'Pour ou contre ?',
+    desc: {
+      termes: desc?.termes || '',
+      limites: desc?.limites || '',
+      tensions: desc?.tensions || '',
+    },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    general: {
+      id: id + 1,
+      title: title.trim(),
+      kind: 'general',
+      step_done: 0,
+      opinion: '',
+      side: null,
+      position: 0,
+      arguments: [],
+    },
+    subs: [],
+  };
+  data.debates = [debate, ...debates];
+  saveDemoData(data);
+  return debate;
+};
+
+export const updateDemoDebate = async (debateId, { title, question, desc }) => {
+  await delay();
+  const data = getDemoData();
+  const debate = findDemoDebate(data, debateId);
+  if (!debate) throw new Error('Débat introuvable');
+  if (title !== undefined) {
+    debate.title = title.trim();
+    if (debate.general) debate.general.title = debate.title;
+  }
+  if (question !== undefined) debate.question = question.trim() || 'Pour ou contre ?';
+  if (desc) debate.desc = { ...debate.desc, ...desc };
+  debate.updated_at = new Date().toISOString();
+  saveDemoData(data);
+  return debate;
+};
+
+export const deleteDemoDebate = async (debateId) => {
+  await delay();
+  const data = getDemoData();
+  data.debates = (data.debates || []).filter((d) => String(d.id) !== String(debateId));
+  saveDemoData(data);
+};
+
+export const createDemoDebateNode = async (debateId, title) => {
+  await delay();
+  const data = getDemoData();
+  const debate = findDemoDebate(data, debateId);
+  if (!debate) throw new Error('Débat introuvable');
+  const node = {
+    id: Date.now(),
+    title: title.trim(),
+    kind: 'sub',
+    step_done: 0,
+    opinion: '',
+    side: null,
+    position: (debate.subs || []).length + 1,
+    arguments: [],
+  };
+  debate.subs = [...(debate.subs || []), node];
+  debate.updated_at = new Date().toISOString();
+  saveDemoData(data);
+  return node;
+};
+
+export const updateDemoDebateNode = async (nodeId, { title, step_done, opinion, side }) => {
+  await delay();
+  const data = getDemoData();
+  const debate = findDemoDebateByNode(data, nodeId);
+  const node = findDemoNode(debate, nodeId);
+  if (!node) throw new Error('Nœud de débat introuvable');
+  if (title !== undefined && node.kind !== 'general') node.title = title.trim();
+  if (step_done !== undefined) node.step_done = Math.max(node.step_done, step_done);
+  if (opinion !== undefined) node.opinion = opinion;
+  if (side !== undefined) node.side = side;
+  if (debate) debate.updated_at = new Date().toISOString();
+  saveDemoData(data);
+  return node;
+};
+
+export const deleteDemoDebateNode = async (nodeId) => {
+  await delay();
+  const data = getDemoData();
+  const debate = findDemoDebateByNode(data, nodeId);
+  if (debate) {
+    debate.subs = (debate.subs || []).filter((n) => String(n.id) !== String(nodeId));
+    debate.updated_at = new Date().toISOString();
+  }
+  saveDemoData(data);
+};
+
+export const createDemoDebateArgument = async (nodeId, payload) => {
+  await delay();
+  const data = getDemoData();
+  const debate = findDemoDebateByNode(data, nodeId);
+  const node = findDemoNode(debate, nodeId);
+  if (!node) throw new Error('Nœud de débat introuvable');
+  const argument = {
+    id: Date.now(),
+    node_id: node.id,
+    side: payload.side || 'pour',
+    text: payload.text.trim(),
+    tags: payload.tags || [],
+    source: payload.source || '',
+    support: payload.support || '',
+    date: payload.date || '',
+    verdict: payload.verdict || null,
+    note: payload.note || '',
+    position: (node.arguments || []).length,
+  };
+  node.arguments = [...(node.arguments || []), argument];
+  if (node.step_done < 1) node.step_done = 1;
+  if (debate) debate.updated_at = new Date().toISOString();
+  saveDemoData(data);
+  return argument;
+};
+
+export const updateDemoDebateArgument = async (argumentId, payload) => {
+  await delay();
+  const data = getDemoData();
+  const { debate, arg } = findDemoArgument(data, argumentId);
+  if (!arg) throw new Error('Argument introuvable');
+  Object.assign(arg, payload);
+  if (debate) debate.updated_at = new Date().toISOString();
+  saveDemoData(data);
+  return arg;
+};
+
+export const deleteDemoDebateArgument = async (argumentId) => {
+  await delay();
+  const data = getDemoData();
+  for (const debate of data.debates || []) {
+    const nodes = [debate.general, ...(debate.subs || [])].filter(Boolean);
+    for (const node of nodes) {
+      if ((node.arguments || []).some((a) => String(a.id) === String(argumentId))) {
+        node.arguments = node.arguments.filter((a) => String(a.id) !== String(argumentId));
+        debate.updated_at = new Date().toISOString();
+      }
+    }
+  }
+  saveDemoData(data);
 };
 
 /**

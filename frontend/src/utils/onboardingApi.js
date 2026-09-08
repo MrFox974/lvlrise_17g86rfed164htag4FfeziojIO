@@ -1,7 +1,7 @@
 import api from '../../utils/api';
 
 /**
- * Crée la pré-configuration "commencer rapidement" (collection de flashcards, routines, tâches).
+ * Crée la pré-configuration "commencer rapidement" (domaines, flashcards, notes, bibliothèque).
  * @returns {Promise<{ success: boolean }>}
  */
 export const quickStart = async () => {
@@ -25,7 +25,7 @@ export const getOnboardingStatus = async () => {
 
 /**
  * Récupère ou crée la session IA onboarding.
- * @returns {Promise<{ stepIndex, stepKey, message, responses }>}
+ * @returns {Promise<{ stepIndex, stepKey, message, responses, domainsForGauges, domainsGaugesPercent }>}
  */
 export const getAiSession = async () => {
   const { data } = await api.get('/api/onboarding/ai-session');
@@ -38,6 +38,15 @@ export const getAiSession = async () => {
  */
 export const postAiStep = async (answer) => {
   const { data } = await api.post('/api/onboarding/ai-step', { answer });
+  return data;
+};
+
+/**
+ * Valide la répartition des 4 gauges (100%).
+ * @param {Record<string, number>} domainsGaugesPercent
+ */
+export const postAiGauges = async (domainsGaugesPercent) => {
+  const { data } = await api.post('/api/onboarding/ai-gauges', { domainsGaugesPercent });
   return data;
 };
 

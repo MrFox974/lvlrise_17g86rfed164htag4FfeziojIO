@@ -29,6 +29,15 @@ function dashFromPct(pct, length) {
   return `${filled} ${length - filled}`;
 }
 
+export function formatMinutes(minutes) {
+  const total = Math.max(0, Math.round(minutes || 0));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h > 0 && m > 0) return `${h}h${String(m).padStart(2, '0')}`;
+  if (h > 0) return `${h}h`;
+  return `${m} min`;
+}
+
 const ARC_TRANSITION = 'stroke-dasharray .8s cubic-bezier(.2,.8,.2,1)';
 
 /** Anneau de progression compact (priorités, listes). */
@@ -65,8 +74,8 @@ export function ProgressRing({ pct, size = 34, stroke = 3, color = 'var(--om-acc
   );
 }
 
-/** Cadran double : deux arcs concentriques, une série chacun. */
-export function GoalDial({ innerPct, outerPct, size = 260 }) {
+/** Cadran double : arc extérieur pro, arc intérieur perso. */
+export function GoalDial({ persoPct, proPct, size = 260 }) {
   const center = size / 2;
   const outerR = size * 0.3306;
   const innerR = size * 0.2686;
@@ -81,7 +90,7 @@ export function GoalDial({ innerPct, outerPct, size = 260 }) {
         stroke="var(--om-pro)"
         strokeWidth="13"
         strokeLinecap="round"
-        strokeDasharray={dashFromPct(outerPct, outerLen)}
+        strokeDasharray={dashFromPct(proPct, outerLen)}
         style={{ transition: ARC_TRANSITION }}
       />
       <path d={arcPath(center, innerR)} fill="none" stroke="var(--om-track)" strokeWidth="11" strokeLinecap="round" />
@@ -91,7 +100,28 @@ export function GoalDial({ innerPct, outerPct, size = 260 }) {
         stroke="var(--om-perso)"
         strokeWidth="11"
         strokeLinecap="round"
-        strokeDasharray={dashFromPct(innerPct, innerLen)}
+        strokeDasharray={dashFromPct(persoPct, innerLen)}
+        style={{ transition: ARC_TRANSITION }}
+      />
+    </svg>
+  );
+}
+
+/** Cadran simple, une seule série. */
+export function SingleDial({ pct, size = 216 }) {
+  const center = size / 2;
+  const r = size * 0.3;
+  const len = arcLength(r);
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible" aria-hidden>
+      <path d={arcPath(center, r)} fill="none" stroke="var(--om-track)" strokeWidth="12" strokeLinecap="round" />
+      <path
+        d={arcPath(center, r)}
+        fill="none"
+        stroke="var(--om-accent)"
+        strokeWidth="12"
+        strokeLinecap="round"
+        strokeDasharray={dashFromPct(pct, len)}
         style={{ transition: ARC_TRANSITION }}
       />
     </svg>
@@ -134,46 +164,38 @@ export function PeriodToggle({ period, onPeriodChange, isLoading }) {
   );
 }
 
-/**
- * Cadran des révisions : arc extérieur = cartes révisées sur la période,
- * arc intérieur = cartes encore dues. Les deux se lisent sur la charge de la
- * période (révisées + restantes), il n'y a donc pas d'objectif à régler.
- */
-export function ReviewCard({ flashcards, isDay, sessionHref }) {
+export function GoalCard({ apprentissage, isDay, sessionHref }) {
   const {
-    reviewed = 0,
-    due = 0,
-    target = 0,
-    totalCards = 0,
-  } = flashcards || {};
+    persoMinutesProgress = 0,
+    persoMinutesTarget = 0,
+    proMinutesProgress = 0,
+    proMinutesTarget = 0,
+    totalMinutesProgress = 0,
+    totalMinutesTarget = 0,
+  } = apprentissage || {};
 
-  const reviewedPct = target > 0 ? (reviewed / target) * 100 : 0;
-  const duePct = target > 0 ? (due / target) * 100 : 0;
-  const percent = target > 0 ? Math.round((reviewed / target) * 100) : 0;
-
-  const hasDeck = totalCards > 0;
-  const cta = due > 0 ? 'Lancer une session' : 'Ouvrir mes collections';
+  const persoPct = persoMinutesTarget > 0 ? (persoMinutesProgress / persoMinutesTarget) * 100 : 0;
+  const proPct = proMinutesTarget > 0 ? (proMinutesProgress / proMinutesTarget) * 100 : 0;
+  const totalPct = totalMinutesTarget > 0 ? Math.round((totalMinutesProgress / totalMinutesTarget) * 100) : 0;
 
   return (
     <section className="om-card om-halo p-5 md:p-6">
       <div className="flex flex-col items-center gap-3.5">
-        <span className="om-kicker">Révisions {isDay ? '(jour)' : '(semaine)'}</span>
+        <span className="om-kicker">Objectif d&apos;apprentissage {isDay ? '(jour)' : '(semaine)'}</span>
 
         {/* Le cadran grandit ; le bloc central garde ses tailles de texte et
             reste centré, donc les chiffres ne bougent pas. */}
         <div className="relative w-[260px] h-[260px] flex items-center justify-center">
-          <GoalDial innerPct={duePct} outerPct={reviewedPct} />
+          <GoalDial persoPct={persoPct} proPct={proPct} />
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="om-metric text-[34px] text-[var(--om-text)]">{reviewed}</span>
+            <span className="om-metric text-[34px] text-[var(--om-text)]">
+              {formatMinutes(totalMinutesProgress)}
+            </span>
             <span className="text-xs text-[var(--om-muted)] mt-1">
-              {target > 0
-                ? `sur ${target} carte${target > 1 ? 's' : ''}`
-                : hasDeck
-                  ? 'rien à réviser'
-                  : 'aucune carte'}
+              sur {formatMinutes(totalMinutesTarget)} visées
             </span>
             <span className="om-kicker mt-2" style={{ color: 'var(--om-accent)' }}>
-              {percent}%
+              {totalPct}%
             </span>
           </div>
         </div>
@@ -181,26 +203,26 @@ export function ReviewCard({ flashcards, isDay, sessionHref }) {
         <div className="flex gap-2 w-full">
           <div className="flex-1 flex flex-col gap-1 px-3 py-2.5 rounded-2xl bg-[var(--om-surface-2)]">
             <span className="flex items-center gap-1.5">
-              <span className="w-[7px] h-[7px] rounded-full bg-[var(--om-pro)]" aria-hidden />
-              <span className="om-kicker">Révisées</span>
+              <span className="w-[7px] h-[7px] rounded-full bg-[var(--om-perso)]" aria-hidden />
+              <span className="om-kicker">Perso</span>
             </span>
             <span className="text-[15px] font-medium tabular-nums text-[var(--om-text)]">
-              {reviewed}
+              {persoMinutesProgress} / {persoMinutesTarget} min
             </span>
           </div>
           <div className="flex-1 flex flex-col gap-1 px-3 py-2.5 rounded-2xl bg-[var(--om-surface-2)]">
             <span className="flex items-center gap-1.5">
-              <span className="w-[7px] h-[7px] rounded-full bg-[var(--om-perso)]" aria-hidden />
-              <span className="om-kicker">À réviser</span>
+              <span className="w-[7px] h-[7px] rounded-full bg-[var(--om-pro)]" aria-hidden />
+              <span className="om-kicker">Pro</span>
             </span>
             <span className="text-[15px] font-medium tabular-nums text-[var(--om-text)]">
-              {due}
+              {proMinutesProgress} / {proMinutesTarget} min
             </span>
           </div>
         </div>
 
         <Link to={sessionHref} className="om-btn om-btn-primary w-full">
-          {cta}
+          Lancer une session
           <i className="ph ph-arrow-right text-[16px]" aria-hidden />
         </Link>
       </div>

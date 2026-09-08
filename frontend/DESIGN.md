@@ -74,8 +74,8 @@ Phosphor (`@phosphor-icons/web`), importé dans `main.jsx`. Contour par défaut
 ## Navigation
 
 - **Mobile** : en-tête avec l'avatar et le prénom, puis dock bas (`AppDock`) —
-  Vue · Cartes · [cerveau] · Routines · To do. Le cerveau sert d'accès rapide
-  aux trois modules.
+  Vue · Apprendre · [cerveau] · Cartes · To do. Le cerveau reste le seul point
+  d'entrée vers les outils de productivité.
 - **Desktop** : navigation dans l'en-tête, cerveau en bouton flottant.
 - Les pages réservent `pb-28` sur mobile pour que rien ne passe sous le dock.
 
