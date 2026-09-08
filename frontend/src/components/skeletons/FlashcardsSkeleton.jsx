@@ -1,4 +1,4 @@
-function CarteMentaleSkeleton() {
+function FlashcardsSkeleton() {
   return (
     <div className="px-4 md:px-6 lg:px-8 pt-1 pb-6 animate-pulse">
       <div className="max-w-4xl mx-auto">
@@ -27,4 +27,4 @@ function CarteMentaleSkeleton() {
   );
 }
 
-export default CarteMentaleSkeleton;
+export default FlashcardsSkeleton;

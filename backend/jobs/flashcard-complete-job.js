@@ -57,7 +57,7 @@ async function notifyDone(job, deck, cardsCreated) {
       title: 'Collection complétée 🎴',
       body: `« ${deck.name} » — ${cardsCreated} carte${cardsCreated > 1 ? 's' : ''} ajoutée${cardsCreated > 1 ? 's' : ''}.`,
       tag: `lvlrise-flashcard-job-${job.id}`,
-      url: '/home/productivite/carte-mentale',
+      url: '/home/flashcards',
     });
   } catch (error) {
     console.error('[flashcard-complete] notification impossible :', error.message);
@@ -70,7 +70,7 @@ async function notifyFailed(job, message) {
       title: 'Complément interrompu',
       body: message.slice(0, 150),
       tag: `lvlrise-flashcard-job-${job.id}`,
-      url: '/home/productivite/carte-mentale',
+      url: '/home/flashcards',
     });
   } catch {
     /* silencieux */

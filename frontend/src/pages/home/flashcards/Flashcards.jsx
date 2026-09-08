@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLoaderData, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { useDemoMode, useDemoBasePath } from '../../../../hooks/useDemoMode';
-import DemoBlockModal from '../../../../components/DemoBlockModal';
+import { useDemoMode, useDemoBasePath } from '../../../hooks/useDemoMode';
+import DemoBlockModal from '../../../components/DemoBlockModal';
 import {
   fetchDecks,
   createDeck,
@@ -17,7 +17,7 @@ import {
   reorderChapters,
   reorderCards,
   fetchDeckGenerationContext,
-} from '../../../../utils/flashcardApi';
+} from '../../../utils/flashcardApi';
 import {
   fetchDemoDecks,
   createDemoDeck,
@@ -32,7 +32,7 @@ import {
   deleteDemoChapter,
   reorderDemoChapters,
   reorderDemoCards,
-} from '../../../../utils/demoApi';
+} from '../../../utils/demoApi';
 import {
   ImportModal,
   SessionSettingsModal,
@@ -43,12 +43,12 @@ import {
   CompleteDeckModal,
   NewCardDot,
   CharCounter,
-} from '../../../../components/Flashcards';
-import { Celebration, CelebrationLive } from '../../../../components/Celebration';
-import { useCelebration } from '../../../../hooks/useCelebration';
-import { FRONT_MAX_CHARS, BACK_MAX_CHARS, getLengthState } from '../../../../lib/flashcardLimits';
-import { isNewCard } from '../../../../lib/flashcardStatus';
-import { buildSession } from '../../../../lib/sessionOrdering';
+} from '../../../components/Flashcards';
+import { Celebration, CelebrationLive } from '../../../components/Celebration';
+import { useCelebration } from '../../../hooks/useCelebration';
+import { FRONT_MAX_CHARS, BACK_MAX_CHARS, getLengthState } from '../../../lib/flashcardLimits';
+import { isNewCard } from '../../../lib/flashcardStatus';
+import { buildSession } from '../../../lib/sessionOrdering';
 
 function DeckList({
   decks,
@@ -1302,7 +1302,7 @@ function DeckDetail({
   );
 }
 
-function CarteMentale() {
+function Flashcards() {
   const navigate = useNavigate();
   const { deckId } = useParams();
   const location = useLocation();
@@ -1328,11 +1328,11 @@ function CarteMentale() {
   }, [fetchDecksFn]);
 
   const handleSelectDeck = (deckIdParam) => {
-    navigate(`${basePath}/productivite/carte-mentale/${deckIdParam}`);
+    navigate(`${basePath}/flashcards/${deckIdParam}`);
   };
 
   const handleBack = () => {
-    navigate(`${basePath}/productivite/carte-mentale`);
+    navigate(`${basePath}/flashcards`);
   };
 
   const handleSessionClick = useCallback(() => {
@@ -1348,7 +1348,7 @@ function CarteMentale() {
           ? localDecks.find((d) => (d.card_count ?? 0) > 0)
           : localDecks.find((d) => (d.due_count ?? 0) > 0);
       if (target) {
-        navigate(`${basePath}/productivite/carte-mentale/${target.id}`, {
+        navigate(`${basePath}/flashcards/${target.id}`, {
           state: { sessionSettings: settings },
         });
       }
@@ -1440,4 +1440,4 @@ function CarteMentale() {
   );
 }
 
-export default CarteMentale;
+export default Flashcards;

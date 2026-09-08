@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const User = require('../models/User');
 const Routine = require('../models/Routine');
 const TodoItem = require('../models/TodoItem');
+const Note = require('../models/Note');
 const FlashcardDeck = require('../models/FlashcardDeck');
 const FlashcardChapter = require('../models/FlashcardChapter');
 const Flashcard = require('../models/Flashcard');
@@ -14,6 +15,7 @@ const PLAN_LIMITS = {
   free: {
     routinesPerDay: 5, // par jour de la semaine (lundi, mardi, …)
     todos: 7,
+    notes: 10,
     flashcardCollections: 1,
     flashcardGroups: 1,
     flashcards: 20,
@@ -21,6 +23,7 @@ const PLAN_LIMITS = {
   pro: {
     routinesPerDay: 20, // par jour de la semaine
     todos: 50,
+    notes: 50,
     flashcardCollections: 10,
     flashcardGroups: 120,
     flashcards: 200,
@@ -28,6 +31,7 @@ const PLAN_LIMITS = {
   premium: {
     routinesPerDay: 100, // par jour de la semaine
     todos: 500,
+    notes: 1000,
     flashcardCollections: 100,
     flashcardGroups: 400,
     flashcards: 1000,
@@ -165,12 +169,29 @@ async function canCreateFlashcard(userId) {
   };
 }
 
+/**
+ * Vérifie si l'utilisateur peut créer une note (attachée à une tâche).
+ */
+async function canCreateNote(userId) {
+  const limits = await getUserLimits(userId);
+  const count = await Note.count({
+    where: { user_id: userId },
+  });
+  return {
+    allowed: count < limits.notes,
+    current: count,
+    limit: limits.notes,
+    plan: await getUserPlan(userId),
+  };
+}
+
 module.exports = {
   PLAN_LIMITS,
   getUserPlan,
   getUserLimits,
   canCreateRoutine,
   canCreateTodo,
+  canCreateNote,
   canCreateFlashcardDeck,
   canCreateFlashcardChapter,
   canCreateFlashcard,

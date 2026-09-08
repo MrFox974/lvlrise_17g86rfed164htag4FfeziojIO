@@ -42,6 +42,7 @@ require('./models/Routine');
 require('./models/RoutineCompletion');
 require('./models/RoutineDaySnapshot');
 require('./models/TodoItem');
+require('./models/Note');
 require('./models/FlashcardDeck');
 require('./models/FlashcardChapter');
 require('./models/Flashcard');
@@ -56,6 +57,7 @@ require('./models/associations');
 
 app.use('/api', require('./router/routine.route'));
 app.use('/api', require('./router/todo.route'));
+app.use('/api', require('./router/note.route'));
 app.use('/api', require('./router/flashcard.route'));
 app.use('/api', require('./router/stats.route'));
 app.use('/api', require('./router/auth.route'));

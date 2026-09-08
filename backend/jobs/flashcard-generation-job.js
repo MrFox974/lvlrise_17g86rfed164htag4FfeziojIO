@@ -48,7 +48,7 @@ async function notifyDone(job, deck, cardsCreated, createdDeck = true) {
       title: createdDeck ? 'Collection prête 🎴' : 'Nouvelles cartes prêtes 🎴',
       body: `« ${deck.name} » — ${cardsCreated} carte${cardsCreated > 1 ? 's' : ''} à réviser.`,
       tag: `lvlrise-flashcard-job-${job.id}`,
-      url: '/home/productivite/carte-mentale',
+      url: '/home/flashcards',
     });
   } catch (error) {
     // L'absence de notification ne remet pas en cause la collection produite.
@@ -62,7 +62,7 @@ async function notifyFailed(job, message) {
       title: 'Génération interrompue',
       body: message.slice(0, 150),
       tag: `lvlrise-flashcard-job-${job.id}`,
-      url: '/home/productivite/carte-mentale',
+      url: '/home/flashcards',
     });
   } catch {
     /* silencieux */

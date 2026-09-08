@@ -39,7 +39,7 @@ async function notifyReady(job, count) {
         ? `${count} propositions à valider pour « ${job.subject} ».`
         : `« ${job.subject} » : la carte vous attend.`,
       tag: `lvlrise-flashcard-job-${job.id}`,
-      url: '/home/productivite/carte-mentale',
+      url: '/home/flashcards',
     });
   } catch (error) {
     // L'absence de notification ne remet pas en cause le travail produit.
@@ -53,7 +53,7 @@ async function notifyFailed(job, message) {
       title: 'Génération interrompue',
       body: message.slice(0, 150),
       tag: `lvlrise-flashcard-job-${job.id}`,
-      url: '/home/productivite/carte-mentale',
+      url: '/home/flashcards',
     });
   } catch {
     /* silencieux */

@@ -3,13 +3,9 @@ import { useEffect } from 'react';
 const BRAIN_ICON = <i className="ph ph-brain text-[26px]" aria-hidden />;
 
 const MODAL_ITEMS = [
-  { id: 'apprentissages', label: 'Apprentissage', icon: 'ph-target' },
-  { id: 'bibliotheque', label: 'Bibliothèque', icon: 'ph-books' },
-  { id: 'flashcard', label: 'FlashCard', icon: 'ph-cards-three' },
+  { id: 'flashcard', label: 'FlashCards', icon: 'ph-cards-three' },
   { id: 'routines', label: 'Routines', icon: 'ph-repeat' },
   { id: 'todo', label: 'To Do List', icon: 'ph-check-square-offset' },
-  { id: 'note', label: 'Note', icon: 'ph-note-pencil' },
-  { id: 'debat', label: 'Débat', icon: 'ph-scales' },
 ];
 
 /**

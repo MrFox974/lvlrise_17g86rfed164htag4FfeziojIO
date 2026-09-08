@@ -1,6 +1,6 @@
 import { fetchDecks, fetchCards, fetchDueCards, fetchChapters } from '../utils/flashcardApi';
 
-export const carteMentaleLoader = async ({ params }) => {
+export const flashcardsLoader = async ({ params }) => {
   try {
     const decks = await fetchDecks();
     const deckId = params.deckId;
@@ -25,7 +25,7 @@ export const carteMentaleLoader = async ({ params }) => {
     }
     return { decks, deck: null, cards: [], dueCards: [], chapters: [] };
   } catch (error) {
-    console.error('Erreur dans carteMentaleLoader:', error);
+    console.error('Erreur dans flashcardsLoader:', error);
     throw new Response('Erreur lors du chargement', {
       status: error.response?.status || 500,
       statusText: error.response?.statusText || 'Internal Server Error',

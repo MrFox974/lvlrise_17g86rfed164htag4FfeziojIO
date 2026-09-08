@@ -1,10 +1,10 @@
 import { useLoaderData, Await, useSearchParams } from 'react-router-dom';
 import { Suspense, useState, useCallback, useEffect, useMemo } from 'react';
-import { fetchDemoTodos, fetchDemoStats, getDemoApprentissageSync } from '../../utils/demoApi';
+import { fetchDemoTodos, fetchDemoStats, getDemoFlashcardsSync } from '../../utils/demoApi';
 import { TAG_ORDER } from '../../lib/tags';
 import {
   PeriodToggle,
-  GoalCard,
+  ReviewCard,
   PrioritiesCard,
   RoutinesCard,
 } from '../../components/overview/OverviewCards';
@@ -86,7 +86,7 @@ function DemoHomeStats({ initialStats }) {
   const isDay = period === 'day';
 
   // Calcul synchrone : le cadran réagit au clic Jour/Semaine sans attendre le fetch.
-  const apprentissage = useMemo(() => getDemoApprentissageSync(period), [period]);
+  const flashcards = useMemo(() => getDemoFlashcardsSync(period), [period]);
 
   return (
     <div className="px-4 md:px-6 lg:px-8 pt-1 pb-6 max-w-6xl mx-auto w-full flex flex-col gap-3.5">
@@ -96,10 +96,10 @@ function DemoHomeStats({ initialStats }) {
       </div>
 
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
-        <GoalCard
-          apprentissage={apprentissage}
+        <ReviewCard
+          flashcards={flashcards}
           isDay={isDay}
-          sessionHref="/demo/home/apprentissage"
+          sessionHref="/demo/home/flashcards"
         />
         <div className="flex flex-col gap-3.5">
           <PrioritiesCard

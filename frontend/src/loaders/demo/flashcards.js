@@ -1,7 +1,6 @@
-import { getDemoData } from '../../hooks/useDemoMode';
 import { fetchDemoDecks, fetchDemoCards, fetchDemoDueCards, fetchDemoChapters } from '../../utils/demoApi';
 
-export const demoCarteMentaleLoader = async ({ params }) => {
+export const demoFlashcardsLoader = async ({ params }) => {
   const decks = await fetchDemoDecks();
 
   const deckId = params.deckId;
