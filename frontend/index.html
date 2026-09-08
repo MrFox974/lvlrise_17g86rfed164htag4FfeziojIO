@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- user-scalable=no : l'outil Débat travaille en plein écran, un pincement
+         accidentel pendant la saisie décalait toute la mise en page.
+         viewport-fit=cover : requis pour que env(safe-area-inset-*) réponde sur iPhone. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <link href="/src/index.css" rel="stylesheet">
+
+    <!-- ✅ Vérification Bing -->
+    <meta name="msvalidate.01" content="577848389B26411E632639B26BBAAE5C" />
+
+    <!-- ✅ SEO de base -->
+    <title>LvlRise – Structurez votre apprentissage. Passez à l'action.</title>
+    <meta name="description" content="Objectifs, routines, flashcards et assistant IA — tout en un. LvlRise vous aide à passer de l'intention à la pratique régulière. Gratuit, sans carte bancaire." />
+    <meta name="keywords" content="apprentissage, routines, flashcards, répétition espacée, productivité, objectifs, formation, autodidacte" />
+    <meta name="author" content="LvlRise" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://lvlrise.com/" />
+
+    <!-- ✅ Open Graph (Facebook, LinkedIn, WhatsApp) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LvlRise" />
+    <meta property="og:title" content="LvlRise – Structurez votre apprentissage. Passez à l'action." />
+    <meta property="og:description" content="Objectifs, routines, flashcards et assistant IA — tout en un. De l'intention à la pratique régulière." />
+    <meta property="og:url" content="https://lvlrise.com/" />
+    <meta property="og:image" content="https://lvlrise.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="fr_FR" />
+
+    <!-- ✅ Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LvlRise – Structurez votre apprentissage. Passez à l'action." />
+    <meta name="twitter:description" content="Objectifs, routines, flashcards et assistant IA — tout en un. De l'intention à la pratique régulière." />
+    <meta name="twitter:image" content="https://lvlrise.com/og-image.png" />
+
+    <!-- ✅ Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- ✅ PWA (installation + notifications push) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="application-name" content="LvlRise" />
+    <!-- iOS ignore le manifest pour l'écran d'accueil : ces meta prennent le relais -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="LvlRise" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- ✅ Theme color (barre navigateur mobile) — aligné sur --om-bg -->
+    <meta name="theme-color" content="#f3f5fe" />
+
+    <!-- ✅ Thème Nocturne appliqué avant le premier paint (pas de flash) -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('lvlrise-theme');
+          document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+          if (t === 'dark') {
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', '#161826');
+          }
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+
+    <!-- ✅ Filet de sécurité : coquille périmée servie par le service worker.
+         Un lancement à froid depuis l'écran d'accueil est le pire moment
+         réseau : la navigation échoue, le worker sert la coquille en cache, et
+         ce vieux HTML devient l'application. Ses bundles, eux, sont marqués
+         immuables et survivent dans le cache HTTP — l'app démarre donc, mais
+         les morceaux de route jamais visités partent chercher sur le réseau
+         des fichiers qu'un déploiement a supprimés depuis. D'où le symptôme
+         déroutant : un outil déjà consulté fonctionne, tous les autres tombent
+         en « échec de chargement du module ».
+
+         Trois filets, du plus précoce au plus tardif :
+         1. un bundle référencé par ce HTML qui renvoie 404 (aucun JS ne
+            s'exécute : ni React ni l'ErrorBoundary ne peuvent rattraper) ;
+         2. un import dynamique rejeté — il n'émet aucun 'error' sur un
+            élément, seul un `unhandledrejection` en témoigne ;
+         3. un contrôle de fraîcheur au démarrage, qui compare le bundle
+            d'entrée exécuté à celui que le serveur annonce. C'est le seul filet
+            qui rattrape une coquille périmée *avant* la panne : sans lui, l'app
+            tourne dans une version d'hier sans que rien ne le signale. -->
+    <script>
+      (function () {
+        var FLAG = 'lvlrise_shell_recovered';
+
+        function recover(reason) {
+          // Hors ligne, la coquille en cache est justement ce qui fait tenir
+          // l'app : la purger n'arrangerait rien et casserait le mode avion.
+          if (navigator.onLine === false) return false;
+          try {
+            if (sessionStorage.getItem(FLAG)) return false;
+            sessionStorage.setItem(FLAG, '1');
+          } catch (e) {
+            return false;
+          }
+          console.warn('LvlRise : coquille périmée (' + reason + '), purge et rechargement.');
+
+          var reloaded = false;
+          function reload() {
+            if (reloaded) return;
+            reloaded = true;
+            // Un reload demandé pendant l'analyse du document est ignoré par le
+            // navigateur : l'erreur de script arrive justement à ce moment-là.
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', function () { location.reload(); });
+            } else {
+              location.reload();
+            }
+          }
+
+          var jobs = [];
+          if (window.caches && caches.keys) {
+            jobs.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              })
+            );
+          }
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            jobs.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (r) { return r.unregister(); }));
+              })
+            );
+          }
+          // La purge est au mieux : `caches.delete` peut traîner si un autre
+          // onglet tient le cache. Le rechargement, lui, doit partir quoi qu'il
+          // arrive — sinon on laisse l'utilisateur sur l'écran blanc.
+          setTimeout(reload, 1500);
+          Promise.all(jobs).catch(function () {}).then(reload);
+          return true;
+        }
+
+        // Le routeur s'en sert pour rattraper un morceau de route manquant :
+        // lui seul sait qu'un import a échoué avant d'afficher son écran
+        // d'erreur, et l'écran d'erreur cache justement la panne réelle.
+        // Renvoie `true` si un rechargement a été engagé, `false` s'il a été
+        // écarté (hors ligne, ou déjà tenté dans cette session) — l'appelant
+        // doit alors laisser l'erreur remonter plutôt que d'attendre en vain.
+        window.__lvlriseRecoverShell = recover;
+
+        /* -- 1. bundle référencé par ce HTML introuvable --------------------- */
+        // Un <script type="module"> ou une feuille de style qui renvoie 404
+        // déclenche un 'error' sur l'élément : il ne remonte qu'en capture.
+        window.addEventListener(
+          'error',
+          function (e) {
+            var el = e.target;
+            if (!el || el === window) return;
+            if (el.tagName !== 'SCRIPT' && el.tagName !== 'LINK') return;
+            // Uniquement nos propres bundles : un script tiers qui échoue
+            // (bloqueur de pub sur Google OAuth, CDN en panne) n'a rien à voir
+            // avec une coquille périmée et ne doit pas purger le cache.
+            var url = el.src || el.href || '';
+            if (url.indexOf(location.origin + '/assets/') !== 0) return;
+            recover(el.tagName.toLowerCase() + ' introuvable');
+          },
+          true
+        );
+
+        /* -- 2. import dynamique rejeté ------------------------------------- */
+        // `import()` ne touche aucun élément du document : son échec n'existe
+        // que sous forme de promesse rejetée. Le libellé varie d'un moteur à
+        // l'autre, d'où la reconnaissance sur plusieurs formulations.
+        var CHUNK_ERROR = /dynamically imported module|Importing a module script failed|error loading dynamically imported|Failed to fetch dynamically/i;
+        window.addEventListener('unhandledrejection', function (e) {
+          var reason = e && e.reason;
+          var message = (reason && (reason.message || reason)) || '';
+          if (typeof message !== 'string' || !CHUNK_ERROR.test(message)) return;
+          recover('module de route introuvable');
+        });
+
+        /* -- 3. contrôle de fraîcheur au démarrage --------------------------- */
+        // On compare le bundle d'entrée réellement exécuté à celui que le
+        // serveur annonce. `no-store` court-circuite le cache HTTP, et une
+        // requête de ce type n'est pas une navigation : le service worker la
+        // laisse passer, on obtient donc bien la vérité du serveur.
+        function checkFreshness() {
+          if (navigator.onLine === false || !window.fetch) return;
+          var running = document.querySelector('script[type="module"][src^="/assets/"]');
+          if (!running) return; // développement : pas de bundle haché.
+          var mine = running.getAttribute('src');
+
+          fetch('/index.html', { cache: 'no-store', credentials: 'omit' })
+            .then(function (res) { return res.ok ? res.text() : null; })
+            .then(function (html) {
+              if (!html) return;
+              var served = html.match(/src="(\/assets\/index-[A-Za-z0-9_-]+\.js)"/);
+              // Pas d'entrée reconnaissable : sans certitude on ne recharge pas.
+              if (!served || served[1] === mine) return;
+              recover('bundle d’entrée périmé');
+            })
+            .catch(function () { /* réseau capricieux : on retentera au prochain lancement */ });
+        }
+
+        /* -- 4. dernier recours : React n'a rien monté ---------------------- */
+        window.addEventListener('load', function () {
+          // Après le premier rendu, pour ne pas disputer la bande passante au
+          // démarrage — c'est un contrôle d'hygiène, pas une urgence.
+          setTimeout(checkFreshness, 2000);
+          setTimeout(function () {
+            var root = document.getElementById('root');
+            if (root && root.childElementCount === 0) recover('root vide');
+          }, 12000);
+        });
+      })();
+    </script>
+
+    <!-- ✅ Données structurées JSON-LD (rich results Google) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "LvlRise",
+      "url": "https://lvlrise.com",
+      "description": "Plateforme d'apprentissage structuré : objectifs, routines, flashcards et assistant IA.",
+      "applicationCategory": "EducationApplication",
+      "operatingSystem": "Web",
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Découverte",
+          "price": "0",
+          "priceCurrency": "EUR"
+        },
+        {
+          "@type": "Offer",
+          "name": "Croissance",
+          "price": "6.99",
+          "priceCurrency": "EUR"
+        },
+        {
+          "@type": "Offer",
+          "name": "Maîtrise",
+          "price": "9.99",
+          "priceCurrency": "EUR"
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

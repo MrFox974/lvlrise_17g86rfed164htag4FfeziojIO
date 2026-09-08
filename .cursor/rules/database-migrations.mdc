@@ -1,0 +1,55 @@
+---
+description: Migrations base de données — convention modèle Sequelize ↔ schéma (local Docker, prod Supabase)
+globs: backend/models/**/*.js, backend/migrations/**/*.sql
+alwaysApply: false
+---
+
+# Migrations base de données
+
+Lorsque l'on **ajoute ou modifie un modèle Sequelize** dans ce projet, la base de données (PostgreSQL) doit être mise à jour via une **migration SQL**. Cette règle décrit la convention à suivre pour garder le schéma aligné en **local (Docker)** et en **production (Supabase ou RDS)**.
+
+---
+
+## Convention : modèle modifié → migration obligatoire
+
+- **Déclencheur** : tout ajout ou modification d’un fichier dans `backend/models/` (nouveau modèle ou nouveaux champs sur un modèle existant).
+- **Obligation** :
+  1. Créer ou modifier un fichier de migration dans `backend/migrations/` avec un **numéro incrémenté** et un nom court, ex. `005-nom-de-la-modif.sql`.
+  2. Le SQL doit **aligner la base avec le modèle** (CREATE TABLE, ALTER TABLE ADD COLUMN, etc.). Préférer des instructions **idempotentes** quand c’est possible (ex. `ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
+  3. Documenter comment exécuter la migration en local et en production (voir ci‑dessous).
+
+---
+
+## Structure des migrations
+
+- Fichiers dans `backend/migrations/` nommés : `NNN-description-courte.sql` (ex. `001-add-projects.sql`, `004-subscriptions.sql`).
+- Un en-tête commenté en début de fichier pour expliquer l’objectif de la migration.
+- Pas de dépendances entre fichiers : chaque migration doit pouvoir être exécutée seule (ou après les précédentes, dans l’ordre numérique).
+
+---
+
+## Exécution des migrations
+
+### Local (Docker Postgres)
+
+- Soit **script dédié** : créer un fichier `backend/run-migration-NNN.js` sur le modèle de `run-migration-003.js` / `run-migration-004.js`. Il lit le fichier SQL correspondant et l’exécute via Sequelize (connexion définie par `backend/.env`).
+- Commande : depuis `backend/`, `node run-migration-NNN.js`.
+- Soit **à la main** : se connecter au conteneur Postgres (`docker exec -i <container> psql -U postgres -d <db_name>`) et coller le contenu du fichier `.sql`.
+
+### Production (Supabase ou RDS)
+
+- Exécuter **le même SQL** que la migration :
+  - **Supabase** : Dashboard → SQL Editor → coller le contenu du fichier `NNN-xxx.sql` → Run.
+  - **RDS / autre** : utiliser les variables d’environnement de prod et lancer le script Node depuis un environnement qui pointe vers la base prod : `node run-migration-NNN.js`, ou exécuter le SQL via un client (psql, DBeaver, etc.).
+
+---
+
+## Récapitulatif
+
+| Action | À faire |
+|--------|--------|
+| Nouveau modèle Sequelize | Créer `backend/migrations/NNN-create-table-xxx.sql` (CREATE TABLE) + optionnellement `run-migration-NNN.js`. |
+| Modèle existant : nouveaux champs | Créer `backend/migrations/NNN-add-xxx.sql` (ALTER TABLE … ADD COLUMN …) + optionnellement `run-migration-NNN.js`. |
+| Après écriture de la migration | Exécuter la migration en **local** (Docker) puis en **production** (Supabase / RDS) pour que le schéma reste aligné. |
+
+En suivant cette convention, tout changement de modèle impose une modification explicite de la base en local et en production, ce qui évite les erreurs du type « column does not exist ».

@@ -1,0 +1,257 @@
+---
+description: Architecture et conventions du projet StarterProject
+alwaysApply: true
+---
+
+# Architecture du Projet StarterProject
+
+## Stack Technique
+
+### Frontend
+- **React** : v19.2.0 (composants fonctionnels uniquement)
+- **React Router** : v7.10.1 (createBrowserRouter, loaders, errorElement)
+- **Vite** : v7.2.4 (build tool)
+- **Tailwind CSS** : v4.1.18 (classes utilitaires inline)
+- **Axios** : v1.13.2 (appels API avec interceptors)
+
+### Backend
+- **Express** : v5.2.1 (framework Node.js)
+- **Sequelize** : v6.37.7 (ORM)
+- **PostgreSQL** : pg + pg-hstore (dialect `postgres`), MySQL2 en option selon config
+- **JWT** : jsonwebtoken v9.0.2 (authentification)
+- **bcryptjs** : v3.0.3 (hashage de mots de passe)
+- **Serverless** : serverless-http v4.0.0 (déploiement AWS Lambda, Function URL)
+
+## Structure des Dossiers
+
+```
+ (racine)
+├── .github/workflows/   # GitHub Actions (deploy-backend.yml à la RACINE, pas dans backend/)
+├── amplify.yml          # Build Amplify (appRoot: frontend), à la racine
+├── docker-compose.yml   # Postgres local (optionnel)
+├── backend/
+│   ├── config/          # Configuration (database.js, Postgres + SSL RDS)
+│   ├── controllers/     # Controllers HTTP (logique métier)
+│   ├── models/          # Modèles Sequelize
+│   ├── router/          # Routes Express
+│   ├── services/        # Services métier (logique pure, réutilisable)
+│   ├── middlewares/     # Middlewares Express
+│   ├── app.js           # Configuration Express (CORS unique, init DB non-bloquant)
+│   ├── handler.js       # Point d'entrée Lambda (serverless-http)
+│   ├── server.js        # Point d'entrée dev local
+│   └── serverless.yml   # Déploiement Lambda (provider.env, functions.api, url: true)
+│
+frontend/
+├── src/
+│   ├── components/      # Composants réutilisables
+│   │   └── skeletons/   # Skeletons de chargement
+│   ├── pages/           # Pages/Composants de route
+│   ├── hooks/           # Hooks React personnalisés
+│   ├── loaders/         # Loaders React Router
+│   ├── utils/           # (api.js est dans frontend/utils/, pas src/utils/)
+│   ├── router.jsx       # Configuration des routes
+│   ├── App.jsx          # Composant racine
+│   └── main.jsx         # Point d'entrée
+├── utils/               # api.js (baseURL VITE_*, interceptors)
+└── index.html, vite.config.js
+```
+
+## Conventions de Nommage
+
+### Backend (CommonJS)
+- **Fichiers** : `kebab-case.js` (ex: `test.controller.js`, `payment.route.js`)
+- **Variables/Fonctions** : `camelCase` (ex: `getAllTests`, `createPaymentIntent`)
+- **Classes** : `PascalCase` (ex: `StripeService`)
+- **Constantes** : `UPPER_SNAKE_CASE` (ex: `DATABASE_NAME`)
+- **Modèles Sequelize** : `PascalCase` (ex: `Test`)
+
+### Frontend (ES6 Modules)
+- **Fichiers** : `PascalCase.jsx` pour composants, `camelCase.js` pour utilitaires
+- **Composants** : `PascalCase` (ex: `PaymentButton`, `ErrorBoundary`)
+- **Hooks** : `usePascalCase` (ex: `useStripePayment`)
+- **Variables/Fonctions** : `camelCase` (ex: `homeLoader`, `createPaymentIntent`)
+
+## Patterns Backend
+
+### Controllers
+```javascript
+// ✅ BON - Structure standard
+exports.getAllTests = async (req, res) => {
+    try {
+        // Logique métier
+        const tests = await Test.findAll({...});
+        res.json({ tests });
+    } catch (error) {
+        console.error('Erreur lors de la récupération:', error);
+        res.status(500).json({ error: 'Erreur serveur', details: error.message });
+    }
+};
+```
+
+### Routes
+```javascript
+// ✅ BON - Routes modulaires
+const express = require('express');
+const route = express.Router();
+const controller = require('../controllers/test.controller');
+
+route.get('/test/getAll', controller.getAllTests);
+module.exports = route;
+```
+
+### Services
+```javascript
+// ✅ BON - Service réutilisable avec logique métier pure
+class StripeService {
+  async createPaymentIntent(amount, currency = 'eur', metadata = {}) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.create({...});
+      return { clientSecret, paymentIntentId, amount, currency };
+    } catch (error) {
+      console.error('Erreur:', error);
+      throw new Error(`Erreur Stripe: ${error.message}`);
+    }
+  }
+}
+module.exports = new StripeService();
+```
+
+### Modèles Sequelize
+```javascript
+// ✅ BON - Configuration explicite
+const Test = sequelize.define('test', {
+  id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+  // ...
+}, {
+  tableName: 'test',
+  freezeTableName: true,
+  timestamps: false,
+});
+```
+
+## Patterns Frontend
+
+### Composants
+```javascript
+// ✅ BON - Composant fonctionnel avec hooks
+function Home() {
+  const { tests = [] } = useLoaderData();
+  
+  return (
+    <div className="p-8">
+      {/* JSX avec Tailwind */}
+    </div>
+  );
+}
+export default Home;
+```
+
+### Loaders React Router
+```javascript
+// ✅ BON - Loader avec gestion d'erreur Response
+export const homeLoader = async () => {
+  try {
+    const { data } = await api.get('/api/test/getAll');
+    return { tests: data.tests || [] };
+  } catch (error) {
+    console.error('Erreur dans homeLoader:', error);
+    throw new Response('Erreur lors du chargement', {
+      status: error.response?.status || 500,
+      statusText: error.response?.statusText || 'Internal Server Error'
+    });
+  }
+};
+```
+**Données différées (UI first)** : pour afficher la page et le skeleton tout de suite, le loader peut retourner une promesse (sans `await`) ; le composant utilise `<Suspense fallback={<Skeleton />}><Await resolve={...}>{(resolved) => ...}</Await></Suspense>`. Détail dans frontend-conventions (Loader avec données différées).
+
+### Hooks Personnalisés
+```javascript
+// ✅ BON - Hook avec useState, useCallback, gestion d'erreur
+export const useStripePayment = ({ amount, onSuccess, onError } = {}) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const handlePayment = useCallback(async (amount, metadata = {}) => {
+    // Logique...
+  }, [amount, onSuccess, onError]);
+  
+  return { handlePayment, loading, error, reset };
+};
+```
+
+### API Utils
+```javascript
+// ✅ BON - Service API centralisé avec interceptors
+import api from './api';
+
+export const createPaymentIntent = async (amount, currency = 'eur', metadata = {}) => {
+  try {
+    const response = await api.post('/payment/create-intent', { amount, currency, metadata });
+    return response.data;
+  } catch (error) {
+    console.error('Erreur:', error);
+    throw error;
+  }
+};
+```
+
+## Gestion d'Erreurs
+
+### Backend
+- Toujours utiliser `try/catch` dans les controllers
+- Logger avec `console.error()` avant de renvoyer l'erreur
+- Retourner `{ error: 'Message', details: error.message }` pour les erreurs serveur
+
+### Frontend
+- Dans les loaders : `throw new Response()` pour les erreurs HTTP
+- Dans les composants : utiliser `ErrorBoundary` (géré par React Router)
+- Dans les hooks : gérer les erreurs avec `setError()` et callbacks `onError`
+
+## Styling (Tailwind CSS)
+
+- Utiliser uniquement des classes Tailwind inline
+- Pas de fichiers CSS séparés (sauf `index.css` pour les styles globaux)
+- Classes utilitaires : `p-8`, `text-2xl`, `bg-blue-600`, `hover:bg-blue-700`
+- Layout flexbox/grid : `flex`, `grid`, `items-center`, `justify-center`
+
+## Variables d'Environnement
+
+### Backend (local : backend/.env, copié depuis backend/.env.example)
+```
+DATABASE_NAME=starter_db
+DATABASE_USER=postgres
+DATABASE_PASSWORD=
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+PORT=8080
+HOST=localhost
+CORS_ORIGIN=http://localhost:5173
+JWT_SECRET=
+JWT_REFRESH_SECRET=
+STRIPE_SECRET_KEY=   # optionnel
+```
+
+### Backend (prod : serverless.yml provider.environment)
+Les mêmes noms (DATABASE_*, CORS_ORIGIN, etc.) sont définis dans `serverless.yml`. Ne pas committer de mots de passe en clair ; préférer SSM/Secrets Manager et référencer dans serverless.
+
+### Frontend (local : frontend/.env, copié depuis frontend/.env.example)
+```
+VITE_PROTOCOLE=http
+VITE_SERVER_HOST=localhost
+VITE_SERVER_PORT=8080
+```
+
+### Frontend (prod : Amplify)
+Variables `VITE_PROTOCOLE`, `VITE_SERVER_HOST`, `VITE_SERVER_PORT` dans la console Amplify, passées au build via `amplify.yml` (env: VITE_*: $VITE_*). En prod Lambda Function URL : host = l’URL de la Function URL, pas de port (443).
+
+## Commentaires et Documentation
+
+- Commentaires détaillés pour les composants complexes (ex: `ErrorBoundary.jsx`)
+- JSDoc pour les fonctions/services importantes
+- Commentaires explicatifs pour les patterns non-évidents
+
+## Déploiement
+
+- **Backend** : AWS Lambda (serverless-http), exposé en **Lambda Function URL** (`url: true` dans serverless.yml, pas d’API Gateway). Workflow GitHub Actions à la **racine** : `.github/workflows/deploy-backend.yml`, `defaults.run.working-directory: backend`, déclenché sur push main si `backend/**` change.
+- **Frontend** : AWS Amplify ; `amplify.yml` à la racine, `appRoot: frontend`, artifacts `dist`. Redirect SPA (404 → index.html) à configurer dans la console Amplify (Hosting > Rewrites and redirects).
+- **Base de données** : AWS RDS PostgreSQL. Connexion depuis Lambda avec SSL si host ≠ localhost (config/database.js).

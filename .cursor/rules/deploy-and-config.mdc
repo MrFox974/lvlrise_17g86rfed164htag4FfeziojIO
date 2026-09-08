@@ -1,0 +1,120 @@
+---
+description: Fichiers de déploiement, config et variables d'environnement (serverless, amplify, docker, app.js, database)
+globs: backend/**/*.{js,yml}, amplify.yml, docker-compose.yml, .env.example
+alwaysApply: false
+---
+
+# Déploiement et configuration
+
+## backend/app.js
+
+### Structure actuelle
+- **CORS** : une seule source de headers (middleware `cors()`). Pas de middleware CORS personnalisé en parallèle pour éviter le header `Access-Control-Allow-Origin` en double (Lambda Function URL ne doit pas ajouter CORS si Express le fait).
+- **Origine autorisée** : `allowedOrigin` depuis `CORS_ORIGIN`, normalisé (trim + suppression slash final). `isOriginAllowed(origin) => !origin || origin === allowedOrigin` pour accepter les requêtes sans en-tête Origin (health check, curl).
+- **Middleware d’erreur** : doit recalculer allowed/origin et ajouter les headers CORS en cas d’erreur, sans réutiliser une variable hors scope.
+- **DB** : `connectToDB()` et `connectModels({ force: false })` appelés en non-bloquant avec `.catch()`, pas en `await` au top-level, pour ne pas bloquer le démarrage Lambda.
+
+### À ne pas faire
+- Ne pas avoir deux middlewares qui posent `Access-Control-Allow-Origin`.
+- Ne pas activer CORS sur la Lambda Function URL dans la console AWS si Express gère déjà CORS.
+
+---
+
+## backend/serverless.yml
+
+### Éléments clés
+- **service** : `backend-lambda`
+- **provider** : `name: aws`, `runtime: nodejs18.x`, `region`, `stage`
+- **provider.environment** : toutes les variables nécessaires à la Lambda (DATABASE_*, CORS_ORIGIN, NODE_ENV, JWT_*, etc.). `CORS_ORIGIN` **sans** slash final (ex. `https://main.xxx.amplifyapp.com`).
+- **functions.api** : `handler: handler.handler`, `url: true` (Lambda Function URL, pas d’API Gateway). Pas d’`events` en même temps que `url: true`.
+
+### Variables typiques
+- DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST, DATABASE_PORT (RDS Postgres)
+- CORS_ORIGIN (origine Amplify exacte, sans slash final)
+- NODE_ENV, JWT_SECRET, JWT_REFRESH_SECRET, etc.
+
+---
+
+## amplify.yml (à la racine du repo)
+
+### Structure
+```yaml
+version: 1
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+          env:
+            - VITE_PROTOCOLE: $VITE_PROTOCOLE
+            - VITE_SERVER_HOST: $VITE_SERVER_HOST
+            - VITE_SERVER_PORT: $VITE_SERVER_PORT
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+```
+
+- **appRoot** : `frontend` (Amplify build depuis ce dossier).
+- **env** : les variables `VITE_*` sont injectées au build ; les valeur réelles sont définies dans la console Amplify (variables d’environnement de l’app).
+- **artifacts** : sortie du build Vite = `dist`, tout `**/*`.
+
+### Redirect SPA (404 → index.html)
+À configurer **dans la console Amplify** (Hosting > Rewrites and redirects > Manage redirects), pas dans amplify.yml. Règle type : source `"/<<*>>"`, status `"404"`, target `"/index.html"`.
+
+---
+
+## docker-compose.yml (à la racine)
+
+### Usage actuel
+- Un service **postgres** (image `postgres:16-alpine`) pour dev/local.
+- Variables : POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (ex. starter_db).
+- Port exposé : 5432.
+- Volume nommé pour la persistance des données.
+
+Sert uniquement à faire tourner Postgres en local ; le backend lit `DATABASE_*` depuis `.env` (host localhost, port 5432).
+
+---
+
+## backend/config/database.js
+
+### Stack
+- **Dialect** : `postgres` (Sequelize).
+- Variables : `DATABASE_*` ou `DB_*` (NAME, USER, PASSWORD, HOST, PORT). Port par défaut 5432.
+
+### SSL pour RDS
+- Si `DB_HOST` n’est pas localhost (ex. host RDS), activer SSL pour satisfaire `pg_hba` / “no encryption” :
+  - `dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }`
+- En local (localhost), pas de SSL.
+
+---
+
+## Variables d’environnement (résumé)
+
+| Contexte | Fichier / lieu | Exemples |
+|----------|----------------|----------|
+| Backend local | backend/.env (depuis .env.example) | DATABASE_*, PORT, CORS_ORIGIN, JWT_* |
+| Backend prod | serverless.yml provider.environment | Idem ; **secrets** (OPENAI, Stripe, etc.) via **GitHub Secrets** + injection dans le workflow → voir règles `secrets-and-github-actions.mdc` |
+| Frontend local | frontend/.env (depuis .env.example) | VITE_PROTOCOLE, VITE_SERVER_HOST, VITE_SERVER_PORT |
+| Frontend prod | Console Amplify (build env) + amplify.yml env | VITE_* passées au build |
+
+---
+
+## Éléments en doublon ou inutiles (hors node_modules)
+
+À nettoyer ou archiver si non utilisés :
+
+1. **backend/config/database.js** : imports `fs` et `path` inutilisés → les supprimer.
+2. **backend/utils/color-message.js** : non requis ailleurs dans le projet → supprimer ou utiliser (ex. logs colorés).
+3. **backend/middlewares/authMiddlewares.js** : non utilisé dans app.js ni dans les routes → supprimer ou brancher sur les routes protégées.
+4. **backend/README.yml** : documentation détaillée mais partiellement obsolète (MySQL, ancienne structure front, .github dans backend). À fusionner avec le README racine ou mettre à jour / déplacer en doc interne.
+5. **TODOLIST.md** (racine) : récap des problèmes/solutions ; temporaire, à supprimer quand inutile.
+6. **Conventions / doublons de doc** : éviter de dupliquer les mêmes explications dans plusieurs .mdc ; privilégier project-architecture pour la vue d’ensemble et deploy-and-config pour les détails de déploiement.

@@ -1,0 +1,160 @@
+service: backend-lambda
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: eu-west-3
+  stage: dev
+  iamRoleStatements:
+    # Permettre à la Lambda de s'invoquer elle-même en async (génération en arrière-plan après 202)
+    - Effect: Allow
+      Action: lambda:InvokeFunction
+      Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-api"
+    # Fichiers joints aux générations : lecture pour l'extraction du texte,
+    # écriture pour la signature des URL de dépôt, suppression pour la purge.
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+        - s3:DeleteObject
+      Resource: !Sub "arn:aws:s3:::${self:service}-${self:provider.stage}-uploads-${AWS::AccountId}/*"
+  environment:
+    NODE_ENV: production
+    # Injectées au déploiement depuis les variables d'environnement (GitHub Secrets / console)
+    DATABASE_NAME: ${env:DATABASE_NAME, ''}
+    DATABASE_USER: ${env:DATABASE_USER, ''}
+    DATABASE_PASSWORD: ${env:DATABASE_PASSWORD, ''}
+    DATABASE_HOST: ${env:DATABASE_HOST, ''}
+    DATABASE_PORT: ${env:DATABASE_PORT, '5432'}
+    PROTOCOLE: https
+    CORS_ORIGIN: https://lvlrise.com,https://www.lvlrise.com
+    CLIENT_IP: lvlrise.com
+    CLIENT_PORT:  
+    SERVER_PORT: 
+    SERVER_HOST:
+    JWT_SECRET: ${env:JWT_SECRET, ''}
+    JWT_REFRESH_SECRET: ${env:JWT_REFRESH_SECRET, ''}
+    TELEGRAM_BOT_TOKEN: ${env:TELEGRAM_BOT_TOKEN, ''}
+    TELEGRAM_CHAT_ID: ${env:TELEGRAM_CHAT_ID, ''}
+    # Injectées au déploiement depuis les variables d'environnement (secrets)
+    STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY, ''}
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY, ''}
+    GOOGLE_CLIENT_ID: ${env:GOOGLE_CLIENT_ID, ''}
+    SMTP_HOST: mail.gandi.net
+    SMTP_PORT: 587
+    SMTP_USER: ${env:SMTP_USER, ''}
+    SMTP_PASS: ${env:SMTP_PASS, ''}
+    SMTP_FROM: ${env:SMTP_FROM, ''}
+    # Web Push (notifications PWA). Générer la paire avec : npm run generate-vapid
+    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY, ''}
+    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY, ''}
+    VAPID_SUBJECT: ${env:VAPID_SUBJECT, 'mailto:contact@lvlrise.com'}
+    # Bucket des fichiers joints (créé par ce même déploiement, voir resources)
+    UPLOADS_BUCKET: !Sub "${self:service}-${self:provider.stage}-uploads-${AWS::AccountId}"
+
+# Le paquet Lambda est plafonné à 250 Mo décompressés, et `geoip-lite` en
+# consomme déjà 154 à lui seul (bases de géolocalisation). On écarte donc tout
+# ce qui n'est jamais chargé à l'exécution : sans ça, la moindre dépendance
+# supplémentaire fait échouer le déploiement.
+package:
+  patterns:
+    - '!**/*.md'
+    - '!**/*.map'
+    - '!**/*.ts'
+    - '!**/test/**'
+    - '!**/tests/**'
+    - '!**/__tests__/**'
+    - '!**/docs/**'
+    - '!**/example/**'
+    - '!**/examples/**'
+    - '!**/.github/**'
+    - '!scripts/**'
+    - '!migrations/**'
+    # pdf-parse embarque quatre versions de pdf.js ; il n'en charge qu'une
+    # (v1.10.100, valeur par défaut de lib/pdf-parse.js).
+    - '!node_modules/pdf-parse/lib/pdf.js/v1.10.88/**'
+    - '!node_modules/pdf-parse/lib/pdf.js/v1.9.426/**'
+    - '!node_modules/pdf-parse/lib/pdf.js/v2.0.550/**'
+
+functions:
+  api:
+    handler: handler.handler
+    timeout: 900  # 15 minutes (max Lambda) pour génération IA détaillée (10-20k caractères/chapitre)
+    url: true  # Crée une Function URL publique (authorizer NONE par défaut)
+
+  # Cron des notifications : balaie les rappels dus depuis le passage précédent.
+  # Cadence d'une minute = c'est elle qui borne le retard perçu par
+  # l'utilisateur (un rappel à 7h32 partait jusqu'à 5 min plus tard en
+  # rate(5 minutes)). 1440 invocations/jour très courtes : coût négligeable.
+  # Point d'entrée dédié (scheduler.js) pour éviter de charger Express et la
+  # synchronisation de schéma de app.js à chaque démarrage à froid.
+  notificationsScheduler:
+    handler: scheduler.handler
+    timeout: 120
+    memorySize: 512
+    events:
+      - schedule: rate(1 minute)
+
+# Resource-based policy pour autoriser l'accès public à la Function URL
+# Deux permissions nécessaires : une pour InvokeFunctionUrl et une pour InvokeFunction
+resources:
+  Resources:
+    # Fichiers joints aux générations (photos, PDF, textes).
+    # La suppression au bout de 7 jours est une règle de cycle de vie du bucket :
+    # elle est appliquée par S3 lui-même, sans dépendre de l'application.
+    UploadsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Sub "${self:service}-${self:provider.stage}-uploads-${AWS::AccountId}"
+        LifecycleConfiguration:
+          Rules:
+            - Id: SupprimerApres7Jours
+              Status: Enabled
+              ExpirationInDays: 7
+            # Un dépôt interrompu laisse un envoi partiel facturé : on le solde.
+            - Id: NettoyerEnvoisIncomplets
+              Status: Enabled
+              AbortIncompleteMultipartUpload:
+                DaysAfterInitiation: 1
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        # Le dépôt se fait par URL signée depuis le navigateur : sans CORS, le
+        # PUT est refusé par le navigateur avant même d'atteindre S3.
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - https://lvlrise.com
+                - https://www.lvlrise.com
+                - http://localhost:5173
+              AllowedMethods: [PUT]
+              AllowedHeaders: ['*']
+              ExposedHeaders: [ETag]
+              MaxAge: 3000
+
+    ApiLambdaFunctionUrlPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          Fn::GetAtt:
+            - ApiLambdaFunction
+            - Arn
+        Action: lambda:InvokeFunctionUrl
+        Principal: '*'
+        FunctionUrlAuthType: NONE
+    ApiLambdaFunctionInvokePermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName:
+          Fn::GetAtt:
+            - ApiLambdaFunction
+            - Arn
+        Action: lambda:InvokeFunction
+        Principal: '*'
+        InvokedViaFunctionUrl: true

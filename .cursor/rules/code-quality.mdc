@@ -1,0 +1,183 @@
+---
+description: Standards de qualité de code et bonnes pratiques
+alwaysApply: true
+---
+
+# Standards de Qualité de Code
+
+## Commentaires et Documentation
+
+### Commentaires Utiles
+```javascript
+// ✅ BON - Explique le POURQUOI, pas le QUOI
+// Convertir en centimes car Stripe attend le montant en centimes
+const amountInCents = amount * 100;
+
+// ✅ BON - Documentation pour composants complexes
+/**
+ * ErrorBoundary - Gère les erreurs React Router v7
+ * Affiche automatiquement les erreurs throw depuis les loaders
+ */
+```
+
+### Commentaires à Éviter
+```javascript
+// ❌ MAUVAIS - Évident
+const x = 5; // x vaut 5
+
+// ❌ MAUVAIS - Redondant
+// Fonction qui retourne les tests
+function getTests() { return tests; }
+```
+
+## Gestion des Erreurs
+
+### Toujours Logger
+```javascript
+// ✅ BON
+try {
+  await operation();
+} catch (error) {
+  console.error('Contexte clair de l\'erreur:', error);
+  // Gérer l'erreur
+}
+```
+
+### Messages d'Erreur Utiles
+```javascript
+// ✅ BON - Message descriptif
+throw new Error(`Impossible de créer le paiement: ${error.message}`);
+
+// ❌ MAUVAIS - Message générique
+throw new Error('Erreur');
+```
+
+## Validation des Données
+
+### Toujours Valider les Entrées
+```javascript
+// ✅ BON
+if (!amount || amount <= 0) {
+  return res.status(400).json({
+    error: 'Le montant est requis et doit être supérieur à 0',
+  });
+}
+
+// ✅ BON - Valeurs par défaut
+const { tests = [] } = useLoaderData();
+const currency = req.body.currency || 'eur';
+```
+
+## Nommage
+
+### Variables et Fonctions
+```javascript
+// ✅ BON - Descriptif et clair
+const paymentIntentId = paymentIntent.id;
+const handlePaymentSuccess = (data) => {};
+
+// ❌ MAUVAIS - Abréviations ou noms vagues
+const piId = paymentIntent.id;
+const handle = (data) => {};
+```
+
+### Constantes
+```javascript
+// ✅ BON - UPPER_SNAKE_CASE pour les constantes
+const MAX_RETRIES = 3;
+const DEFAULT_CURRENCY = 'eur';
+
+// ✅ BON - camelCase pour les variables
+const defaultCurrency = 'eur';
+```
+
+## Structure du Code
+
+### Ordre des Imports
+```javascript
+// 1. Imports externes (React, librairies)
+import { useState, useCallback } from 'react';
+import { useLoaderData } from 'react-router-dom';
+
+// 2. Imports internes (composants, utils)
+import Layout from './components/Layout';
+import api from '../utils/api';
+
+// 3. Imports de types (si TypeScript)
+```
+
+### Organisation des Fonctions
+```javascript
+// ✅ BON - Fonctions courtes et focalisées
+function Component() {
+  // 1. Hooks
+  const data = useLoaderData();
+  const [loading, setLoading] = useState(false);
+  
+  // 2. Handlers
+  const handleClick = () => {};
+  
+  // 3. Effects (si nécessaire)
+  
+  // 4. Render
+  return <div>...</div>;
+}
+```
+
+## Performance
+
+### Lazy Loading
+```javascript
+// ✅ BON - Charger les composants à la demande
+const Home = lazy(() => import('./pages/home/home'));
+const About = lazy(() => import('./pages/about/about'));
+```
+
+### useCallback pour les Callbacks
+```javascript
+// ✅ BON - Mémoriser les callbacks passés en props
+const handleAction = useCallback(() => {
+  // logique
+}, [dependencies]);
+```
+
+## Sécurité
+
+### Ne Jamais Exposer les Secrets
+```javascript
+// ✅ BON - Variables d'environnement
+const secretKey = process.env.STRIPE_SECRET_KEY;
+
+// ❌ MAUVAIS - Secrets en dur
+const secretKey = 'sk_test_1234567890';
+```
+
+### Validation Côté Serveur
+```javascript
+// ✅ BON - Toujours valider côté backend
+if (!amount || amount <= 0) {
+  return res.status(400).json({ error: 'Montant invalide' });
+}
+```
+
+## Consistance
+
+### Formatage
+- Utiliser des guillemets simples `'` pour les strings (sauf si besoin de doubles)
+- Point-virgule à la fin des instructions
+- 2 espaces pour l'indentation
+- Virgule finale dans les objets/tableaux multi-lignes
+
+### Exemples du Projet
+```javascript
+// Formatage cohérent avec le projet
+const obj = {
+  field1: 'value1',
+  field2: 'value2',
+};
+
+const arr = [
+  'item1',
+  'item2',
+];
+```

@@ -1,0 +1,47 @@
+version: 1
+applications:
+  - appRoot: frontend
+    customHeaders:
+      - pattern: '/index.html'
+        headers:
+          - key: 'Cache-Control'
+            value: 'no-cache, no-store, must-revalidate, max-age=0'
+      - pattern: '/'
+        headers:
+          - key: 'Cache-Control'
+            value: 'no-cache, no-store, must-revalidate, max-age=0'
+      # Le service worker ne doit jamais être servi depuis le cache : une version
+      # périmée resterait active sur les appareils et bloquerait les mises à jour.
+      - pattern: '/sw.js'
+        headers:
+          - key: 'Cache-Control'
+            value: 'no-cache, no-store, must-revalidate, max-age=0'
+          - key: 'Service-Worker-Allowed'
+            value: '/'
+      - pattern: '/manifest.webmanifest'
+        headers:
+          - key: 'Cache-Control'
+            value: 'no-cache, max-age=0'
+          - key: 'Content-Type'
+            value: 'application/manifest+json'
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+          env:
+            - VITE_PROTOCOLE: $VITE_PROTOCOLE
+            - VITE_SERVER_HOST: $VITE_SERVER_HOST
+            - VITE_SERVER_PORT: $VITE_SERVER_PORT
+            - VITE_STRIPE_PUBLISHABLE_KEY: pk_live_51LHXZqL0ina1Sstshk45XUWJrNsLqp6Ikn8RgG8k5U1r0q9SAIkpqHumm7qvgTT7hKk4nALIEB46cD1ee9LR5hhz00tZMB0hMw
+
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*

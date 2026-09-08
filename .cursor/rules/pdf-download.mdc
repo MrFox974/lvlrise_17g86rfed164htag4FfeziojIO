@@ -1,0 +1,67 @@
+---
+description: Téléchargements PDF (factures, reçus) — méthode propre et optimale
+alwaysApply: true
+---
+
+# Téléchargements PDF (factures / reçus)
+
+## Principes
+- **Ne pas** envoyer un PDF en JSON/base64 si possible (lourd, mémoire). Préférer **stream** ou **Buffer** + headers HTTP.
+- **Backend** = source de vérité (génération/accès), **Frontend** = déclenchement + UX.
+- Toujours définir un **nom de fichier** via `Content-Disposition` et le type via `Content-Type: application/pdf`.
+
+## Backend (Express) — endpoint PDF
+Pattern recommandé : `GET /api/.../:id/pdf`
+
+```javascript
+exports.downloadPdf = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pdfBuffer = await pdfService.generatePdfBuffer({ id }); // Buffer
+
+    const filename = `document-${id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(200).send(pdfBuffer);
+  } catch (error) {
+    console.error('Erreur téléchargement PDF:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+};
+```
+
+Notes :
+- Si le PDF est stocké (S3, disque, DB), préférer `stream.pipe(res)` plutôt que charger tout en mémoire.
+- En Lambda/Function URL, viser la même sémantique HTTP (headers + binaire). Si la plateforme l’exige, renvoyer `{ isBase64Encoded: true, body: buffer.toString('base64') }`.
+
+## Frontend (React) — télécharger proprement (Blob)
+Toujours demander un **Blob** et déclencher un download via `URL.createObjectURL`.
+
+```javascript
+import api from '../utils/api';
+
+export const downloadPdf = async ({ url, fallbackFilename = 'document.pdf' }) => {
+  const response = await api.get(url, { responseType: 'blob' });
+  const blob = new Blob([response.data], { type: 'application/pdf' });
+
+  const header = response.headers?.['content-disposition'] || '';
+  const match = header.match(/filename="(.+?)"/);
+  const filename = match?.[1] || fallbackFilename;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+};
+```
+
+## Cas “page facture / reçu” (optimal)
+- **Route dédiée** (ex. `InvoiceDetails`) avec un bouton “Télécharger la facture”.
+- **Backend** : `GET /api/invoices/:invoiceId/pdf` protégé (auth), qui :
+  - soit **stream** le PDF généré à la volée,
+  - soit renvoie un **presigned URL** (S3) si le PDF est déjà généré (meilleure perf et scalabilité).
+- **UX** : afficher un `loading` pendant la génération, et gérer les erreurs (403/404/500) avec un message clair.

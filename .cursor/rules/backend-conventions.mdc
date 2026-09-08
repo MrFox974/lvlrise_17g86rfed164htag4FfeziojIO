@@ -1,0 +1,242 @@
+---
+description: Conventions de code backend (Express, Sequelize)
+globs: backend/**/*.js
+alwaysApply: false
+---
+
+# Conventions Backend
+
+## Structure des Controllers
+
+### Pattern Standard
+```javascript
+const Model = require('../models/Model');
+const { Op } = require('sequelize');
+
+exports.actionName = async (req, res) => {
+    try {
+        // Validation des données
+        if (!req.body.requiredField) {
+            return res.status(400).json({
+                error: 'Le champ requiredField est requis',
+            });
+        }
+        
+        // Logique métier
+        const result = await Model.findAll({
+            where: { /* conditions */ },
+            order: [['id', 'ASC']]
+        });
+        
+        // Réponse succès
+        res.json({ data: result });
+    } catch (error) {
+        console.error('Erreur lors de l\'action:', error);
+        res.status(500).json({ 
+            error: 'Erreur serveur', 
+            details: error.message 
+        });
+    }
+};
+```
+
+### Règles
+- Toujours utiliser `async/await`
+- Toujours wrapper dans `try/catch`
+- Logger les erreurs avec `console.error()` avant de répondre
+- Retourner des objets JSON cohérents : `{ error: '...' }` ou `{ data: ... }`
+- Utiliser `return res.status(...)` pour arrêter l'exécution après une erreur
+
+## Structure des Routes
+
+```javascript
+const express = require('express');
+const route = express.Router();
+const controller = require('../controllers/controller');
+
+route.get('/endpoint', controller.action);
+route.post('/endpoint', controller.action);
+route.put('/endpoint/:id', controller.action);
+route.delete('/endpoint/:id', controller.action);
+
+module.exports = route;
+```
+
+### Intégration dans app.js
+```javascript
+app.use('/api', require('./router/test.route'));
+app.use('/api/payment', require('./router/payment.route'));
+```
+
+## Services (Logique Métier Pure)
+
+### Pattern
+```javascript
+class ServiceName {
+  async methodName(param1, param2 = 'default') {
+    try {
+      // Logique pure (pas de req/res)
+      const result = await externalApi.call();
+      return { success: true, data: result };
+    } catch (error) {
+      console.error('Erreur dans ServiceName.methodName:', error);
+      throw new Error(`Erreur: ${error.message}`);
+    }
+  }
+}
+
+module.exports = new ServiceName();
+```
+
+### Règles
+- Services = logique métier réutilisable
+- Pas d'accès direct à `req`/`res`
+- Retourner des objets ou throw des erreurs
+- Utiliser des classes pour regrouper les méthodes liées
+
+## Modèles Sequelize
+
+### Pattern Standard
+```javascript
+const { sequelize } = require('../config/database');
+const { DataTypes } = require('sequelize');
+
+const ModelName = sequelize.define(
+  'table_name',  // Nom de la table en DB
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    field_name: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+  },
+  {
+    tableName: 'table_name',      // Nom EXACT de la table
+    freezeTableName: true,         // Empêche Sequelize de modifier le nom
+    timestamps: false,            // Pas de createdAt/updatedAt si non présents
+  }
+);
+
+module.exports = ModelName;
+```
+
+### Règles
+- Toujours utiliser `freezeTableName: true` pour éviter les modifications de nom
+- Spécifier `tableName` explicitement
+- Utiliser `timestamps: false` si les colonnes n'existent pas en DB
+- Importer `sequelize` depuis `config/database.js`
+
+## Requêtes Sequelize
+
+### Pattern de Recherche
+```javascript
+const { Op } = require('sequelize');
+
+const results = await Model.findAll({
+  where: {
+    id: { [Op.between]: [1, 10] },
+    // ou
+    field: { [Op.like]: '%search%' },
+  },
+  order: [['id', 'ASC']],
+  limit: 10,
+});
+```
+
+### Règles
+- Utiliser les opérateurs Sequelize (`Op.between`, `Op.like`, etc.)
+- Toujours spécifier `order` pour la cohérence
+- Utiliser `limit` pour les grandes listes
+
+## Gestion des Erreurs
+
+### Dans les Controllers
+```javascript
+// ✅ BON
+try {
+  // code
+} catch (error) {
+  console.error('Contexte de l\'erreur:', error);
+  res.status(500).json({ 
+    error: 'Message utilisateur', 
+    details: error.message 
+  });
+}
+```
+
+### Dans les Services
+```javascript
+// ✅ BON
+try {
+  // code
+} catch (error) {
+  console.error('Erreur dans Service.method:', error);
+  throw new Error(`Erreur descriptive: ${error.message}`);
+}
+```
+
+## Configuration Express
+
+### app.js Pattern (Lambda + dev local)
+```javascript
+require('dotenv').config();
+const express = require('express');
+const app = express();
+const cors = require('cors');
+const { connectToDB, connectModels } = require('./config/database');
+
+// CORS : une seule source (middleware cors()), pas de doublon avec un middleware custom
+const allowedOrigin = (process.env.CORS_ORIGIN || 'http://localhost:5173').trim().replace(/\/$/, '');
+const isOriginAllowed = (origin) => !origin || origin === allowedOrigin;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','X-CSRF-Token']
+}));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // ⚠️ Ne pas mettre true
+
+// Routes
+require('./models/Test');
+app.use('/api', require('./router/test.route'));
+
+// Middleware d'erreur : ajouter headers CORS en cas d'erreur si besoin
+app.use((err, req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = (process.env.CORS_ORIGIN || 'http://localhost:5173').trim().replace(/\/$/, '');
+  if ((!origin || origin === allowed) && origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error', details: ... });
+});
+
+// DB : init non-bloquant pour Lambda (pas await au top-level)
+connectToDB().catch(err => console.error('Failed to connect to database:', err));
+connectModels(false).catch(err => console.error('Failed to sync models:', err));
+
+module.exports = app;
+```
+
+### Règles
+- Toujours charger `dotenv` en premier.
+- Un seul middleware CORS (cors()) ; CORS_ORIGIN sans slash final ; accepter requêtes sans Origin si besoin.
+- `extended: false` pour `urlencoded`.
+- Connecter la DB en non-bloquant (`.catch()`) pour ne pas bloquer le cold start Lambda.
+
+## config/database.js (Postgres + RDS SSL)
+
+### Pattern
+- **Dialect** : `postgres`. Variables `DATABASE_*` ou `DB_*`.
+- **SSL pour RDS** : si host ≠ localhost, `dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }`.
+- Ne pas importer `fs`/`path` si non utilisés.

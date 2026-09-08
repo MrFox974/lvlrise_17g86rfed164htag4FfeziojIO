@@ -1,0 +1,342 @@
+---
+description: Conventions de code frontend (React, React Router v7)
+globs: frontend/**/*.{js,jsx}
+alwaysApply: false
+---
+
+# Conventions Frontend
+
+## Composants React
+
+### Pattern Standard
+```javascript
+import { useLoaderData } from 'react-router-dom';
+
+function ComponentName() {
+  const { data } = useLoaderData();
+  
+  return (
+    <div className="p-8">
+      {/* JSX avec Tailwind */}
+    </div>
+  );
+}
+
+export default ComponentName;
+```
+
+### Règles
+- Toujours utiliser des composants fonctionnels (pas de classes)
+- Utiliser `useLoaderData()` pour récupérer les données des loaders
+- Exporter avec `export default`
+- Nommer les composants en `PascalCase`
+
+## React Router v7 - Loaders
+
+### Pattern Standard
+```javascript
+import api from '../../utils/api';
+
+export const pageLoader = async () => {
+  try {
+    const { data } = await api.get('/api/endpoint');
+    return {
+      items: data.items || [],
+      metadata: data.metadata || {},
+    };
+  } catch (error) {
+    console.error('Erreur dans pageLoader:', error);
+    throw new Response(
+      'Erreur lors du chargement des données',
+      { 
+        status: error.response?.status || 500,
+        statusText: error.response?.statusText || 'Internal Server Error'
+      }
+    );
+  }
+};
+```
+
+### Règles
+- Toujours wrapper dans `try/catch`
+- Logger les erreurs avec `console.error()`
+- Utiliser `throw new Response()` pour les erreurs HTTP
+- Retourner des objets avec valeurs par défaut (`|| []`, `|| {}`)
+- Nommer les loaders : `pageNameLoader` (ex: `homeLoader`)
+
+### Loader avec données différées (UI first)
+Pour afficher la page tout de suite et le skeleton pendant le chargement API, retourner une **promesse** (sans `await`) puis utiliser `<Await>` dans le composant. La logique reste dans le loader.
+
+**Loader** : retourner immédiatement `{ key: promise }` au lieu d’attendre l’API.
+```javascript
+import api from '../../utils/api';
+
+export const pageLoader = () => {
+  const itemsPromise = api
+    .get('/api/endpoint')
+    .then(({ data }) => Array.isArray(data.items) ? data.items : [])
+    .catch((error) => {
+      console.error('Erreur dans pageLoader:', error);
+      throw new Response('Erreur lors du chargement', {
+        status: error.response?.status || 500,
+        statusText: error.response?.statusText || 'Internal Server Error',
+      });
+    });
+  return { items: itemsPromise };
+};
+```
+
+**Composant** : `useLoaderData()` reçoit `{ items }` (promesse). Afficher la structure de la page, puis `<Suspense fallback={<PageSkeleton />}><Await resolve={items} errorElement={...}>{(resolvedItems) => (...)}</Await></Suspense>` pour la zone des données.
+```javascript
+import { useLoaderData, Await } from 'react-router-dom';
+import { Suspense } from 'react';
+import PageSkeleton from '../components/skeletons/PageSkeleton';
+
+function Page() {
+  const { items } = useLoaderData();
+  return (
+    <div className="p-8">
+      <h1>Titre</h1>
+      <Suspense fallback={<PageSkeleton />}>
+        <Await
+          resolve={items}
+          errorElement={<p className="text-red-500">Erreur lors du chargement.</p>}
+        >
+          {(resolvedItems) => (
+            resolvedItems.length === 0
+              ? <p>Aucune donnée</p>
+              : <ul>{resolvedItems.map((x) => <li key={x.id}>...</li>)}</ul>
+          )}
+        </Await>
+      </Suspense>
+    </div>
+  );
+}
+```
+- La page et le titre s’affichent immédiatement.
+- Le skeleton s’affiche pendant le chargement, puis le contenu quand la promesse est résolue.
+- En React Router v7 il n’y a plus `defer()` : on retourne directement un objet contenant la promesse.
+
+## React Router v7 - Routes
+
+### Configuration dans router.jsx
+```javascript
+import { createBrowserRouter, createRoutesFromElements, Route } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
+import { pageLoader } from './loaders/page';
+
+const Page = lazy(() => import('./pages/page/page'));
+
+export const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route path="/" element={<Layout />} errorElement={<ErrorBoundary />}>
+      <Route
+        path="page"
+        element={
+          <Suspense fallback={<PageSkeleton />}>
+            <Page />
+          </Suspense>
+        }
+        loader={pageLoader}
+      />
+    </Route>
+  )
+);
+```
+
+### Règles
+- Utiliser `lazy()` pour le code splitting
+- Chaque route a son propre `Suspense` avec un skeleton dédié
+- `errorElement` sur le layout parent pour gérer toutes les erreurs
+- Loaders exportés depuis `loaders/` et importés dans `router.jsx`
+
+## Hooks Personnalisés
+
+### Pattern Standard
+```javascript
+import { useState, useCallback } from 'react';
+
+export const useCustomHook = ({
+  defaultValue,
+  onSuccess,
+  onError,
+} = {}) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const handleAction = useCallback(async (param) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Logique
+      const result = await api.call(param);
+      onSuccess?.(result);
+      return result;
+    } catch (err) {
+      const errorMessage = err.message || 'Erreur';
+      setError(errorMessage);
+      onError?.(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [defaultValue, onSuccess, onError]);
+  
+  const reset = useCallback(() => {
+    setLoading(false);
+    setError(null);
+  }, []);
+  
+  return {
+    handleAction,
+    loading,
+    error,
+    reset,
+  };
+};
+```
+
+### Règles
+- Nommer avec préfixe `use` : `useStripePayment`, `useApiCall`
+- Utiliser `useCallback` pour les fonctions retournées
+- Gérer `loading`, `error` dans le hook
+- Callbacks optionnels avec `onSuccess?.()` et `onError?.()`
+- Fonction `reset()` pour réinitialiser l'état
+
+## Services API (utils/)
+
+### Pattern Standard
+```javascript
+import api from './api';
+
+export const fetchData = async (params) => {
+  try {
+    const response = await api.get('/api/endpoint', { params });
+    return response.data;
+  } catch (error) {
+    console.error('Erreur lors de fetchData:', error);
+    throw error;
+  }
+};
+
+export const createData = async (data) => {
+  try {
+    const response = await api.post('/api/endpoint', data);
+    return response.data;
+  } catch (error) {
+    console.error('Erreur lors de createData:', error);
+    throw error;
+  }
+};
+```
+
+### Règles
+- Centraliser les appels API dans `utils/`
+- Utiliser l'instance `api` configurée (avec interceptors)
+- Logger les erreurs avant de les throw
+- Nommer les fonctions de manière descriptive : `createPaymentIntent`, `getPaymentStatus`
+
+## Composants Réutilisables
+
+### Pattern avec Props
+```javascript
+function ReusableComponent({
+  requiredProp,
+  optionalProp = 'default',
+  onAction,
+  className = '',
+  disabled = false,
+}) {
+  const handleClick = () => {
+    onAction?.(requiredProp);
+  };
+  
+  return (
+    <div className={`base-classes ${className}`}>
+      {/* JSX */}
+    </div>
+  );
+}
+
+export default ReusableComponent;
+```
+
+### Règles
+- Props avec valeurs par défaut pour les optionnelles
+- Callbacks optionnels avec `onAction?.()`
+- `className` pour permettre l'extension des styles
+- Props booléennes avec `disabled = false`
+
+## Styling Tailwind CSS
+
+### Classes Utilitaires
+```javascript
+// ✅ BON - Classes Tailwind inline
+<div className="p-8 bg-white rounded-lg shadow-md">
+  <h1 className="text-2xl font-bold mb-4">Titre</h1>
+  <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+    Bouton
+  </button>
+</div>
+```
+
+### Règles
+- Utiliser uniquement des classes Tailwind inline
+- Pas de fichiers CSS séparés (sauf `index.css` pour globaux)
+- Classes conditionnelles : `className={isActive ? 'bg-blue-600' : 'bg-gray-300'}`
+- Layout : `flex`, `grid`, `items-center`, `justify-center`
+- Espacement : `p-8`, `mb-4`, `gap-2`
+- Responsive : `md:`, `lg:` si nécessaire
+
+## Gestion d'Erreurs
+
+### Dans les Composants
+- Utiliser `ErrorBoundary` (géré par React Router)
+- Pas besoin de try/catch dans les composants de route
+
+### Dans les Loaders
+```javascript
+// ✅ BON
+throw new Response('Message', { status: 500, statusText: 'Error' });
+```
+
+### Dans les Hooks
+```javascript
+// ✅ BON
+catch (err) {
+  setError(err.message);
+  onError?.(err);
+}
+```
+
+## Structure des Fichiers
+
+### Pages
+```
+pages/
+  page-name/
+    page-name.jsx    # Composant principal
+```
+
+### Composants
+```
+components/
+  ComponentName.jsx
+  skeletons/
+    PageSkeleton.jsx
+```
+
+### Loaders
+```
+loaders/
+  page-name.js      # Export: export const pageNameLoader = async () => {}
+```
+
+### Utils
+```
+utils/
+  api.js            # Instance axios configurée
+  stripeApi.js      # Appels API Stripe
+```

@@ -1,0 +1,158 @@
+---
+description: Système d'abonnement = page Plans + menu Profil (déconnexion, paramètres) + page Paramètres. Stripe, checkout, désabonnement.
+globs: backend/**/stripe*.js, backend/**/payment*.js, backend/**/auth*.js, frontend/**/pricing*, frontend/**/payment*, frontend/**/Plan*, frontend/**/Settings*, frontend/**/DashboardLayout*
+alwaysApply: false
+---
+
+# Abonnements Stripe : page Plans, menu Profil, Paramètres, checkout et désabonnement
+
+## Convention : livrable « système d'abonnement »
+
+**Lorsque l'on demande un système d'abonnement**, livrer **les deux parties** suivantes :
+
+1. **Page Plan (Plans)** : liste des offres (au moins 3 plans dont un gratuit), checkout Stripe, finalisation après paiement, désabonnement (voir sections ci-dessous).
+2. **Menu Profil + page Paramètres** : dans le layout connecté, un bouton **Profil** (à la place d’un simple bouton Connexion/Déconnexion) ouvrant un menu avec **Déconnexion** et **Paramètres**. La page **Paramètres** permet de modifier le profil, gérer l’abonnement (voir période, se désabonner) et supprimer le compte (détail dans la section « Menu Profil et page Paramètres »).
+
+Ne pas livrer uniquement la page Plans : inclure systématiquement le menu Profil et la page Paramètres décrits ci-dessous.
+
+---
+
+Lorsque l'on implémente ou modifie un **système d'abonnement** dans ce projet, respecter la structure et le fonctionnement décrits ci-dessous (au moins **3 plans**, dont un gratuit, et les flux checkout + désabonnement).
+
+---
+
+## Convention variables d'environnement
+
+- **Toutes les variables d'environnement** liées à Stripe et aux plans doivent être **déclarées dans backend/.env.example**, **même vides**, pour que l'on sache quoi compléter (clé secrète Stripe, IDs produit par plan/fréquence).
+- En prod, les définir dans le déploiement (ex. serverless.yml provider.environment) sans mettre de secrets en clair dans le repo.
+
+### Variables backend (backend/.env.example)
+
+```
+# Stripe
+STRIPE_SECRET_KEY=
+
+# IDs produit Stripe (dashboard Stripe) — un par plan et par fréquence (mensuel / annuel).
+# Format recommandé : STRIPE_PRODUCT_<PLAN>_MONTHLY, STRIPE_PRODUCT_<PLAN>_YEARLY
+# Exemple pour 3 plans (free + 2 payants) : pro, premium
+STRIPE_PRODUCT_PRO_MONTHLY=
+STRIPE_PRODUCT_PRO_YEARLY=
+STRIPE_PRODUCT_PREMIUM_MONTHLY=
+STRIPE_PRODUCT_PREMIUM_YEARLY=
+
+# URL frontend (pour success_url / cancel_url Stripe Checkout)
+CORS_ORIGIN=http://localhost:5173
+```
+
+Le plan **free** n'a pas d'ID produit Stripe. Les plans payants ont chacun au moins un produit mensuel et un produit annuel (ou un seul produit avec deux prix). Si le projet n'utilise qu'un seul mode de facturation, on peut n'avoir qu'une variable par plan, mais la convention reste : **déclarer toutes les variables nécessaires, même vides**.
+
+---
+
+## Backend : structure
+
+### Modèle User (champs abonnement)
+
+- `subscription_plan` : string (ex. 'free', 'pro', 'premium').
+- `stripe_customer_id` : optionnel, pour lier le client Stripe.
+- `stripe_subscription_id` : ID de l'abonnement Stripe (pour annulation).
+- `subscription_current_period_start` / `subscription_current_period_end` : dates de la période en cours (optionnel mais utile pour l'affichage).
+
+### Service Stripe (stripe.service.js)
+
+- **Configuration** : lire `STRIPE_SECRET_KEY` ; si absent, le service peut logger un warning et désactiver les appels Stripe (ou lever une erreur selon le besoin).
+- **Plans métier** : un objet `PLANS` (ou équivalent) avec au moins **3 plans** (ex. free, pro, premium), chacun avec `id`, `name`, `monthlyAmount`, `yearlyAmount`, `currency`. Les montants en centimes (ou unité Stripe).
+- **IDs produit** : construire un objet (ex. `STRIPE_PRODUCT_IDS`) à partir des variables d'environnement (STRIPE_PRODUCT_*_MONTHLY, *_YEARLY). Ne pas hardcoder les IDs en dur ; utiliser `process.env.STRIPE_PRODUCT_*` avec des valeurs par défaut vides si besoin.
+- **Récupération des price IDs** : pour chaque plan payant et chaque mode (monthly/yearly), soit utiliser directement un price ID en env, soit récupérer les prix récurrents du produit Stripe via l'API (`stripe.prices.list({ product: productId, type: 'recurring' })`) et associer au bon intervalle (month/year).
+- **createCheckoutSessionSubscription(planId, billingMode, clientReferenceId, customerEmail, successUrl, cancelUrl)** :
+ - Vérifier que le plan n'est pas 'free'.
+ - Récupérer le price ID pour (planId, billingMode).
+ - Créer une session Stripe Checkout en `mode: 'subscription'`, avec `line_items` sur ce price, `client_reference_id` = userId, `customer_email`, `success_url`, `cancel_url`, et `subscription_data.metadata` avec au minimum `planId`, `billingMode` (pour la finalisation côté backend).
+ - Retourner `{ url: session.url }`.
+- **retrieveCheckoutSession(sessionId)** : récupérer la session avec `expand: ['subscription']` pour avoir les métadonnées et les dates de période.
+- **cancelSubscription(subscriptionId, atPeriodEnd)** : si `atPeriodEnd === true`, faire `stripe.subscriptions.update(id, { cancel_at_period_end: true })` ; sinon `stripe.subscriptions.cancel(id)`.
+- **getPublicPlans()** : retourner la liste des plans (id, name, monthlyAmount, yearlyAmount, currency) pour l'affichage frontend (sans données sensibles).
+
+### Routes paiement (payment.route.js)
+
+- `GET /payment/plans` : public ; retourne `{ plans }` depuis le service (getPublicPlans).
+- `POST /payment/checkout-session` : **protégé** (auth middleware). Body `{ planId, billingMode }`. Récupère l'utilisateur connecté, construit success_url et cancel_url (base = CORS_ORIGIN), appelle createCheckoutSessionSubscription, retourne `{ url }` pour redirection côté client.
+
+### Routes auth (pour finalisation et désabonnement)
+
+- `POST /auth/subscription-complete` : **protégé**. Body `{ session_id }`. Récupère la session Stripe (retrieveCheckoutSession), vérifie payment_status/status, extrait subscription et metadata (planId, billingMode), récupère les dates de période, met à jour le User (subscription_plan, stripe_subscription_id, subscription_current_period_*, stripe_customer_id si présent). Répond avec `{ success, subscription_plan, subscription_current_period_start, subscription_current_period_end }`.
+- `POST /auth/unsubscribe` : **protégé**. Body optionnel `{ reason }`. Charge le User ; si déjà 'free', retourner succès ; sinon si `stripe_subscription_id` présent, appeler cancelSubscription(id, true). Puis mettre à jour le User : subscription_plan = 'free', stripe_subscription_id et périodes à null. Optionnel : log événement, notification (ex. Telegram). Répondre avec un message du type "Abonnement résilié ; vous restez sur le plan jusqu'à la fin de la période en cours."
+
+---
+
+## Frontend : structure
+
+### Page « Plan » (liste des offres)
+
+- Une **page Plan** (ex. route `/plan` ou `/pricing`) qui affiche **au moins 3 plans** : un gratuit (free) et au moins deux payants (ex. pro, premium).
+- Pour chaque plan : nom, prix mensuel / annuel, liste de fonctionnalités, bouton d'action.
+- Le plan gratuit : bouton type « Commencer gratuitement » (pas d'appel Stripe).
+- Les plans payants : bouton qui mène vers le **checkout** (voir ci-dessous), avec choix du mode de facturation (mensuel / annuel) si l'UI le prévoit (query param ou state).
+- Les montants peuvent être chargés depuis `GET /payment/plans` pour rester cohérents avec le backend, ou définis en dur côté front pour l'affichage (au choix du projet).
+
+### Flux checkout (clic sur un plan payant)
+
+- Redirection vers une route dédiée (ex. `/plan/payment/:planId` avec query `?mode=monthly|yearly`) ou appel direct depuis la page plan.
+- Côté client : appeler **POST /payment/checkout-session** (authentifié) avec `{ planId, billingMode }`, recevoir `{ url }`, puis **redirection navigateur** vers cette URL (Stripe Checkout).
+- Si l'utilisateur n'est pas connecté : retour 401 ; afficher un message du type « Vous devez être connecté pour souscrire » et proposer d'aller sur la page de connexion.
+
+### Page succès après paiement
+
+- Stripe redirige vers une **success_url** fournie au moment de la création de la session (ex. `{CORS_ORIGIN}/plan/success?session_id={CHECKOUT_SESSION_ID}`).
+- Une **page succès** (ex. route `/plan/success`) lit `session_id` dans l'URL, appelle **POST /auth/subscription-complete** avec `{ session_id }` (utilisateur déjà authentifié). Le backend met à jour le plan et les dates.
+- Afficher un message de confirmation et un lien vers l'app ou vers la page plan. Optionnel : rafraîchir le contexte user (getMe ou mise à jour du state) pour afficher le nouveau plan partout.
+
+### Désabonnement
+
+- Disponible dans les **paramètres compte** (ou équivalent) : un bouton type « Annuler mon abonnement » ou « Me désabonner », visible uniquement si `user.subscription_plan` est un plan payant (ex. 'pro', 'premium').
+- À la confirmation (modal ou page dédiée), appeler **POST /auth/unsubscribe** avec optionnel `{ reason }`. Après succès : recharger la page ou mettre à jour l'utilisateur (getMe) pour afficher le plan 'free'. Message utilisateur : résiliation prise en compte, accès au plan payant jusqu'à la fin de la période en cours.
+
+### Menu Profil et page Paramètres (obligatoire avec le système d'abonnement)
+
+- **Layout connecté (ex. DashboardLayout)** : remplacer un éventuel bouton « Connexion » ou « Déconnexion » seul par un **bouton « Profil »** qui ouvre un menu déroulant (dropdown) avec :
+  - **Paramètres** : lien vers la page Paramètres (ex. `/dashboard/settings`).
+  - **Déconnexion** : bouton qui déconnecte (suppression tokens / logout) et redirige vers la page de connexion.
+- Fermeture du menu au clic à l’extérieur (useRef + useEffect ou équivalent).
+
+- **Page Paramètres** (route dédiée, ex. `/dashboard/settings`) avec trois blocs :
+  1. **Informations personnelles**
+     - Champ **nom d’affichage** (username) : modifiable pour tous.
+     - Si **auth_provider !== 'google'** : champs **email**, **mot de passe actuel**, **nouveau mot de passe**, **confirmation**. Envoi via **PATCH /api/auth/me** (backend : updateProfile, ne pas modifier email/mot de passe pour un compte Google).
+     - Si compte Google : afficher un message du type « Compte connecté via Google ; seul le nom d’affichage peut être modifié ici. »
+  2. **Abonnement**
+     - Afficher le **plan actuel** et la **période d’abonnement** (dates `subscription_current_period_start` / `subscription_current_period_end`).
+     - Si plan payant : bouton **« Se désabonner »** (ou « Annuler mon abonnement ») avec confirmation ; appel **POST /auth/unsubscribe** ; après succès, rafraîchir l’utilisateur (getMe / refreshUser) et afficher un message indiquant que l’accès reste actif jusqu’à la fin de la période.
+  3. **Supprimer le compte**
+     - Bouton « Supprimer mon compte » ouvrant une modale de confirmation : demander à l’utilisateur de saisir un mot clé (ex. « SUPPRIMER ») pour débloquer le bouton de confirmation, puis appel **DELETE /api/auth/me**. Après succès : déconnexion et redirection vers la page de connexion.
+
+- **Backend** (si pas déjà en place) : **PATCH /api/auth/me** (body : username?, email?, password?, currentPassword?) et **DELETE /api/auth/me** pour mise à jour du profil et suppression du compte. GET /api/auth/me doit retourner les champs d’abonnement (subscription_plan, subscription_current_period_start, subscription_current_period_end) pour l’affichage Paramètres.
+
+### Utilitaires API (paymentApi.js ou équivalent)
+
+- `fetchPlans()` : GET /payment/plans.
+- `createCheckoutSession(planId, billingMode)` : POST /payment/checkout-session (auth), retourne `{ url }`.
+- `subscriptionComplete(sessionId)` : POST /auth/subscription-complete avec `{ session_id: sessionId }`.
+- `unsubscribe(reason?)` : POST /auth/unsubscribe avec `{ reason }` (auth).
+
+Pour la page Paramètres (authApi.js ou équivalent) :
+
+- `updateProfile({ username?, email?, password?, currentPassword? })` : PATCH /api/auth/me (auth).
+- `deleteAccount()` : DELETE /api/auth/me (auth).
+- Contexte auth : exposer `refreshUser()` (appel getMe + mise à jour du state) pour rafraîchir l’utilisateur après mise à jour du profil ou désabonnement.
+
+---
+
+## Récapitulatif flux
+
+1. **Affichage des plans** : page Plan avec au moins 3 offres (free + 2 payantes) ; prix et fonctionnalités cohérents avec le backend.
+2. **Souscription** : utilisateur connecté clique sur un plan payant → appel createCheckoutSession → redirection vers Stripe Checkout → paiement → Stripe redirige vers success_url avec session_id.
+3. **Finalisation** : page success appelle subscription-complete(session_id) → backend met à jour User → affichage de confirmation.
+4. **Menu Profil** : dans le layout connecté, bouton « Profil » → menu avec Paramètres et Déconnexion.
+5. **Paramètres** : modification du profil (nom ; email/mot de passe si compte local), affichage de la période d’abonnement et désabonnement, suppression du compte avec confirmation.
+6. **Désabonnement** : depuis Paramètres → « Me désabonner » → appel unsubscribe → backend annule en fin de période côté Stripe et met le User en 'free' → UI à jour.
+
+En suivant ce modèle (3 plans minimum, page Plan, **menu Profil + page Paramètres**, checkout, subscription-complete, unsubscribe, PATCH/DELETE /api/auth/me), tout nouveau système d'abonnement restera cohérent avec le projet.
