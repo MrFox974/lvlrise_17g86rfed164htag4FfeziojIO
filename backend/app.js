@@ -35,14 +35,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-require('./models/Test');
 require('./models/User');
 require('./models/EmailVerificationToken');
 require('./models/PendingRegistration');
-require('./models/LearningGauge');
-require('./models/GaugeDaily');
-require('./models/Domain');
-require('./models/LearningTime');
 require('./models/Routine');
 require('./models/RoutineCompletion');
 require('./models/RoutineDaySnapshot');
@@ -50,10 +45,6 @@ require('./models/TodoItem');
 require('./models/FlashcardDeck');
 require('./models/FlashcardChapter');
 require('./models/Flashcard');
-require('./models/Note');
-require('./models/MarkdownDomain');
-require('./models/MarkdownChapter');
-require('./models/MarkdownSection');
 require('./models/AdminEvent');
 require('./models/PageVisit');
 require('./models/OnboardingSession');
@@ -61,20 +52,11 @@ require('./models/PushSubscription');
 require('./models/NotificationLog');
 require('./models/FlashcardJob');
 require('./models/Upload');
-require('./models/Debate');
-require('./models/DebateNode');
-require('./models/DebateArgument');
 require('./models/associations');
 
-app.use('/api', require('./router/test.route'));
-app.use('/api', require('./router/learning-gauge.route'));
-app.use('/api', require('./router/domain.route'));
-app.use('/api', require('./router/learning-time.route'));
 app.use('/api', require('./router/routine.route'));
 app.use('/api', require('./router/todo.route'));
 app.use('/api', require('./router/flashcard.route'));
-app.use('/api', require('./router/note.route'));
-app.use('/api', require('./router/markdown.route'));
 app.use('/api', require('./router/stats.route'));
 app.use('/api', require('./router/auth.route'));
 app.use('/api', require('./router/onboarding.route'));
@@ -83,7 +65,6 @@ app.use('/api', require('./router/admin.route'));
 app.use('/api', require('./router/track.route'));
 app.use('/api', require('./router/push.route'));
 app.use('/api', require('./router/upload.route'));
-app.use('/api', require('./router/debate.route'));
 
 // Middleware de gestion d'erreur global
 app.use((err, req, res, next) => {
@@ -141,42 +122,6 @@ const dbReadyPromise = (async () => {
       }
     }
     try {
-      await qi.addColumn('markdown_chapter', 'content', { type: DataTypes.TEXT });
-      console.log('Colonne markdown_chapter.content ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_chapter.content:', e.message);
-    }
-    try {
-      await qi.addColumn('markdown_domain', 'is_public', { type: DataTypes.BOOLEAN, defaultValue: false });
-      console.log('Colonne markdown_domain.is_public ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.is_public:', e.message);
-    }
-    try {
-      await qi.addColumn('markdown_domain', 'generation_status', { type: DataTypes.STRING(20), allowNull: true });
-      console.log('Colonne markdown_domain.generation_status ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.generation_status:', e.message);
-    }
-    try {
-      await qi.addColumn('markdown_domain', 'generation_progress', { type: DataTypes.INTEGER, allowNull: true });
-      console.log('Colonne markdown_domain.generation_progress ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.generation_progress:', e.message);
-    }
-    try {
-      await qi.addColumn('markdown_domain', 'generation_step', { type: DataTypes.STRING(100), allowNull: true });
-      console.log('Colonne markdown_domain.generation_step ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.generation_step:', e.message);
-    }
-    try {
-      await qi.addColumn('markdown_domain', 'generation_log', { type: DataTypes.JSON, allowNull: true });
-      console.log('Colonne markdown_domain.generation_log ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.generation_log:', e.message);
-    }
-    try {
       await qi.addColumn('onboarding_session', 'generation_log', { type: DataTypes.JSON });
       console.log('Colonne onboarding_session.generation_log ajoutée.');
     } catch (e) {
@@ -201,24 +146,6 @@ const dbReadyPromise = (async () => {
       if (!e.message?.includes('already exists')) console.warn('user.email_verified_at:', e.message);
     }
     try {
-      await qi.addColumn('markdown_domain', 'imported_from_domain_id', { type: DataTypes.INTEGER, allowNull: true });
-      console.log('Colonne markdown_domain.imported_from_domain_id ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.imported_from_domain_id:', e.message);
-    }
-    try {
-      await qi.addColumn('markdown_domain', 'generation_started_at', { type: DataTypes.DATE, allowNull: true });
-      console.log('Colonne markdown_domain.generation_started_at ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.generation_started_at:', e.message);
-    }
-    try {
-      await qi.addColumn('markdown_domain', 'generation_cancelled', { type: DataTypes.BOOLEAN, defaultValue: false });
-      console.log('Colonne markdown_domain.generation_cancelled ajoutée.');
-    } catch (e) {
-      if (!e.message?.includes('already exists')) console.warn('markdown_domain.generation_cancelled:', e.message);
-    }
-    try {
       await qi.addColumn('onboarding_session', 'generation_started_at', { type: DataTypes.DATE, allowNull: true });
       console.log('Colonne onboarding_session.generation_started_at ajoutée.');
     } catch (e) {
@@ -236,6 +163,13 @@ const dbReadyPromise = (async () => {
       console.log('Colonne flashcard.learned_at ajoutée.');
     } catch (e) {
       if (!e.message?.includes('already exists')) console.warn('flashcard.learned_at:', e.message);
+    }
+    // Dernière révision : alimente le cadran flashcards de la vue d'ensemble.
+    try {
+      await qi.addColumn('flashcard', 'last_reviewed_at', { type: DataTypes.DATE, allowNull: true });
+      console.log('Colonne flashcard.last_reviewed_at ajoutée.');
+    } catch (e) {
+      if (!e.message?.includes('already exists')) console.warn('flashcard.last_reviewed_at:', e.message);
     }
     // Carte à l'unité : nature du travail, destination des cartes et propositions
     // en attente de validation.

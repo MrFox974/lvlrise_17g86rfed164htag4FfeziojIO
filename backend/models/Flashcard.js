@@ -64,6 +64,15 @@ const Flashcard = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    /**
+     * Date de la dernière révision (toute note confondue). Sert aux statistiques
+     * de la vue d'ensemble : `updated_at` ne convient pas, il bouge aussi quand
+     * la carte est simplement éditée.
+     */
+    last_reviewed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     position: {
       type: DataTypes.INTEGER,
       allowNull: false,

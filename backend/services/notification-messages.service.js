@@ -45,14 +45,6 @@ function pickDailyAvoidingPrevious(list, userId, dateStr, kind, slot = 0) {
   return list[index === previousIndex ? (index + 1) % list.length : index];
 }
 
-function formatMinutes(minutes) {
-  const total = Math.max(0, Math.round(minutes || 0));
-  if (total < 60) return `${total} min`;
-  const hours = Math.floor(total / 60);
-  const rest = total % 60;
-  return rest === 0 ? `${hours} h` : `${hours} h ${String(rest).padStart(2, '0')}`;
-}
-
 function formatList(items, max = 3) {
   const list = (items || []).slice(0, max);
   if (list.length === 0) return '';
@@ -113,14 +105,18 @@ function buildMorningGreeting(ctx, routine) {
     parts.push(`On commence par « ${routine.label} ».`);
   }
 
-  // Ce que j'apprends aujourd'hui
-  const domainsToday = (ctx.learning.domains || []).filter((d) => d.expectedMinutes > 0);
-  if (domainsToday.length > 0) {
-    const names = formatList(domainsToday.map((d) => d.name), 2);
-    const target = domainsToday.reduce((sum, d) => sum + d.expectedMinutes, 0);
-    parts.push(`Au programme : ${names} (${formatMinutes(target)}).`);
-  } else if ((ctx.learning.domains || []).length > 0) {
-    parts.push(`Pas d'objectif d'apprentissage calé aujourd'hui — ${formatList(ctx.learning.domains.map((d) => d.name), 2)} t'attend si l'envie vient.`);
+  // Ce que j'ai à réviser aujourd'hui
+  const decksDue = (ctx.flashcards.decks || []).filter((d) => d.due > 0);
+  if (decksDue.length > 0) {
+    const names = formatList(decksDue.map((d) => d.name), 2);
+    const total = decksDue.reduce((sum, d) => sum + d.due, 0);
+    parts.push(
+      total === 1
+        ? `Au programme : 1 carte à réviser (${names}).`
+        : `Au programme : ${total} cartes à réviser (${names}).`
+    );
+  } else if ((ctx.flashcards.decks || []).length > 0) {
+    parts.push("Aucune carte à réviser aujourd'hui — tes collections sont à jour.");
   }
 
   // Ce que j'ai à faire
@@ -246,18 +242,18 @@ function buildDailyReport(ctx) {
   const title = pickDailyAvoidingPrevious(REPORT_TITLES, ctx.userId, ctx.dateStr, 'report', 0);
 
   const routinePercent = percent(ctx.routines.done, ctx.routines.total);
-  const learningPercent = ctx.learning.percent;
+  const flashcardPercent = ctx.flashcards.percent;
 
   const segments = [];
   if (routinePercent !== null) {
     segments.push(`Routines ${routinePercent}% (${ctx.routines.done}/${ctx.routines.total})`);
   }
-  if (learningPercent !== null) {
+  if (flashcardPercent !== null) {
     segments.push(
-      `apprentissage ${learningPercent}% (${formatMinutes(ctx.learning.actualMinutes)} sur ${formatMinutes(ctx.learning.expectedMinutes)})`
+      `flashcards ${flashcardPercent}% (${ctx.flashcards.reviewed} sur ${ctx.flashcards.reviewed + ctx.flashcards.due})`
     );
-  } else if (ctx.learning.actualMinutes > 0) {
-    segments.push(`apprentissage ${formatMinutes(ctx.learning.actualMinutes)}`);
+  } else if (ctx.flashcards.reviewed > 0) {
+    segments.push(`${ctx.flashcards.reviewed} cartes révisées`);
   }
 
   if (segments.length === 0) {
@@ -269,7 +265,7 @@ function buildDailyReport(ctx) {
     };
   }
 
-  const average = [routinePercent, learningPercent].filter((v) => v !== null);
+  const average = [routinePercent, flashcardPercent].filter((v) => v !== null);
   const globalPercent = average.length > 0
     ? Math.round(average.reduce((a, b) => a + b, 0) / average.length)
     : 0;
@@ -333,7 +329,7 @@ const NIGHT_NEUTRAL = [
 function buildNightGreeting(ctx, routine) {
   const routinePercent = percent(ctx.routines.done, ctx.routines.total);
   const didSomething =
-    ctx.routines.done > 0 || ctx.learning.actualMinutes > 0 || ctx.todos.completedToday > 0;
+    ctx.routines.done > 0 || ctx.flashcards.reviewed > 0 || ctx.todos.completedToday > 0;
 
   const openers = didSomething ? NIGHT_OPENERS_ACTIVE : NIGHT_OPENERS_NEUTRAL;
   const title = pickDailyAvoidingPrevious(openers, ctx.userId, ctx.dateStr, 'night', 0)
@@ -360,8 +356,10 @@ function buildNightGreeting(ctx, routine) {
         : `${ctx.routines.done} routines`
     );
   }
-  if (ctx.learning.actualMinutes > 0) {
-    achievements.push(`${formatMinutes(ctx.learning.actualMinutes)} d'apprentissage`);
+  if (ctx.flashcards.reviewed > 0) {
+    achievements.push(
+      ctx.flashcards.reviewed === 1 ? '1 carte révisée' : `${ctx.flashcards.reviewed} cartes révisées`
+    );
   }
   if (ctx.todos.completedToday > 0) {
     achievements.push(
@@ -386,7 +384,6 @@ module.exports = {
   buildDailyReport,
   buildNightGreeting,
   // exportés pour les tests / le débogage
-  formatMinutes,
   formatList,
   percent,
 };

@@ -11,24 +11,15 @@ const { sequelize, connectModels } = require('../config/database');
 const { DataTypes } = require('sequelize');
 
 // Charge tous les modèles pour qu'ils soient enregistrés
-require('../models/Test');
 require('../models/User');
 require('../models/Routine');
 require('../models/RoutineCompletion');
 require('../models/RoutineDaySnapshot');
 require('../models/TodoItem');
 require('../models/TodoGroup');
-require('../models/LearningGauge');
-require('../models/GaugeDaily');
-require('../models/Domain');
-require('../models/LearningTime');
 require('../models/FlashcardDeck');
 require('../models/FlashcardChapter');
 require('../models/Flashcard');
-require('../models/Note');
-require('../models/MarkdownDomain');
-require('../models/MarkdownChapter');
-require('../models/MarkdownSection');
 require('../models/PushSubscription');
 require('../models/NotificationLog');
 require('../models/FlashcardJob');
