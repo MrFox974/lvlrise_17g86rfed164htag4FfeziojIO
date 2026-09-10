@@ -43,7 +43,14 @@ Module._load = function patched(request, parent, isMain) {
 process.env.OPENAI_API_KEY = 'test-key';
 const B = path.join(__dirname, '..');
 const flashcards = require(path.join(B, 'services', 'flashcard-generation.service'));
-const markdown = require(path.join(B, 'services', 'markdown-generation.service'));
+// La Bibliothèque n'est pas présente dans tous les dépôts qui partagent ce
+// script : son absence fait sauter sa section, pas tout le fichier.
+let markdown = null;
+try {
+  markdown = require(path.join(B, 'services', 'markdown-generation.service'));
+} catch {
+  markdown = null;
+}
 
 let failures = 0;
 function assert(label, cond, detail = '') {
@@ -171,35 +178,39 @@ La conclusion des chercheurs est nette : les barrières tombent une à une.`;
   );
 
   console.log('\n— 4. Bibliothèque : les documents atteignent les trois étapes —');
-  prompts.length = 0;
-  await markdown.generateStructure('Un parcours sur l\'immunologie', 'knowledge', GLOSSAIRE);
-  const structure = prompts[prompts.length - 1];
-  assert('structure : documents transmis', structure.includes('Antigène'), structure.slice(0, 200));
-  assert(
-    'structure : les documents font autorité',
-    structure.includes('DOCUMENTS FOURNIS PAR L\'UTILISATEUR')
-  );
+  if (!markdown) {
+    console.log('· section ignorée : ce dépôt n\'a pas de service de Bibliothèque.');
+  } else {
+    prompts.length = 0;
+    await markdown.generateStructure('Un parcours sur l\'immunologie', 'knowledge', GLOSSAIRE);
+    const structure = prompts[prompts.length - 1];
+    assert('structure : documents transmis', structure.includes('Antigène'), structure.slice(0, 200));
+    assert(
+      'structure : les documents font autorité',
+      structure.includes('DOCUMENTS FOURNIS PAR L\'UTILISATEUR')
+    );
 
-  const struct = {
-    name: 'Immunologie',
-    chapters: [{ title: 'Chap 1. Bases', sections: [{ title: 'Part 1. Antigènes' }] }],
-  };
-  prompts.length = 0;
-  await markdown.generateChapterContent('Immunologie', struct, 0, [], 'knowledge', GLOSSAIRE);
-  assert('chapitre : documents transmis', prompts[0].includes('Antigène'), prompts[0].slice(0, 200));
+    const struct = {
+      name: 'Immunologie',
+      chapters: [{ title: 'Chap 1. Bases', sections: [{ title: 'Part 1. Antigènes' }] }],
+    };
+    prompts.length = 0;
+    await markdown.generateChapterContent('Immunologie', struct, 0, [], 'knowledge', GLOSSAIRE);
+    assert('chapitre : documents transmis', prompts[0].includes('Antigène'), prompts[0].slice(0, 200));
 
-  prompts.length = 0;
-  await markdown.generateSectionContent(
-    'Immunologie', struct, 'Chap 1. Bases', 'contenu', 'Part 1. Antigènes', [], 'knowledge', GLOSSAIRE
-  );
-  assert('sous-chapitre : documents transmis', prompts[0].includes('Antigène'), prompts[0].slice(0, 200));
+    prompts.length = 0;
+    await markdown.generateSectionContent(
+      'Immunologie', struct, 'Chap 1. Bases', 'contenu', 'Part 1. Antigènes', [], 'knowledge', GLOSSAIRE
+    );
+    assert('sous-chapitre : documents transmis', prompts[0].includes('Antigène'), prompts[0].slice(0, 200));
 
-  prompts.length = 0;
-  await markdown.generateStructure('Un parcours sur l\'immunologie', 'knowledge');
-  assert(
-    'Bibliothèque sans document : aucun bloc source',
-    !prompts[prompts.length - 1].includes('DOCUMENTS FOURNIS PAR L\'UTILISATEUR')
-  );
+    prompts.length = 0;
+    await markdown.generateStructure('Un parcours sur l\'immunologie', 'knowledge');
+    assert(
+      'Bibliothèque sans document : aucun bloc source',
+      !prompts[prompts.length - 1].includes('DOCUMENTS FOURNIS PAR L\'UTILISATEUR')
+    );
+  }
 
   console.log('\n— 5. Faits récents : le dossier de recherche atteint les deux étapes —');
   const DOSSIER = [
