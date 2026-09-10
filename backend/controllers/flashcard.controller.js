@@ -7,6 +7,7 @@ const FlashcardJob = require('../models/FlashcardJob');
 const spacedRepetitionService = require('../services/spaced-repetition.service');
 const planRestrictionsService = require('../services/planRestrictionsService');
 const flashcardGenerationService = require('../services/flashcard-generation.service');
+const webResearchService = require('../services/web-research.service');
 const { isLambda, invokeWorkerAsync } = require('../utils/invoke-worker');
 const { runFlashcardGenerationJob } = require('../jobs/flashcard-generation-job');
 const { runFlashcardSingleCardJob } = require('../jobs/flashcard-single-card-job');
@@ -113,6 +114,7 @@ function summarizeJob(job) {
     chapter_mode: job.chapter_mode || 'auto',
     chapter_id: job.chapter_id,
     refine_prompt: job.refine_prompt || null,
+    web_search: Boolean(job.web_search),
     groups_total: job.groups_total,
     groups_done: job.groups_done,
     cards_created: job.cards_created,
@@ -178,7 +180,11 @@ function findRunningJob(userId, mode) {
 
 /**
  * Lance la génération d'une collection en arrière-plan.
- * Body: { subject, cardCount?, level?, language?, uploadIds? }
+ * Body: { subject, cardCount?, level?, language?, uploadIds?, webSearch? }
+ *
+ * `webSearch` : le job récolte d'abord des faits datés par recherche web et les
+ * cartes s'y tiennent. Utile dès que le sujet bouge (versions, chiffres, lois) ;
+ * inutile sur un sujet stable, où cela ne fait qu'allonger la génération.
  *
  * Répond immédiatement en 202 : le travail se poursuit côté serveur même si
  * l'utilisateur ferme l'application, et une notification push l'avertit quand
@@ -186,7 +192,7 @@ function findRunningJob(userId, mode) {
  */
 exports.generateDeck = async (req, res) => {
   try {
-    const { subject, cardCount, level, language, uploadIds } = req.body || {};
+    const { subject, cardCount, level, language, uploadIds, webSearch } = req.body || {};
     if (!subject || !String(subject).trim()) {
       return res.status(400).json({ error: 'Le sujet est requis' });
     }
@@ -235,6 +241,9 @@ exports.generateDeck = async (req, res) => {
       upload_ids: Array.isArray(uploadIds)
         ? uploadIds.map((id) => parseInt(id, 10)).filter(Number.isInteger).slice(0, 10)
         : [],
+      // Refusée d'emblée si le serveur n'a pas de recherche web : mieux vaut des
+      // cartes annoncées sans actualité qu'une promesse non tenue.
+      web_search: Boolean(webSearch) && webResearchService.isAvailable(),
       status: 'queued',
       step: 'En attente de démarrage…',
     });
@@ -271,7 +280,7 @@ exports.generateDeck = async (req, res) => {
 exports.generateDeckCards = async (req, res) => {
   try {
     const { deckId } = req.params;
-    const { subject, cardCount, level, language, uploadIds, chapterId } = req.body || {};
+    const { subject, cardCount, level, language, uploadIds, chapterId, webSearch } = req.body || {};
 
     const deck = await FlashcardDeck.findOne({
       where: { id: deckId, user_id: req.user_id },
@@ -315,6 +324,7 @@ exports.generateDeckCards = async (req, res) => {
       upload_ids: Array.isArray(uploadIds)
         ? uploadIds.map((id) => parseInt(id, 10)).filter(Number.isInteger).slice(0, 10)
         : [],
+      web_search: Boolean(webSearch) && webResearchService.isAvailable(),
       // Collection connue dès le départ : le worker complète au lieu de créer.
       deck_id: deck.id,
       chapter_mode: target.chapter_mode,

@@ -123,6 +123,17 @@ const FlashcardJob = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true,
     },
+    /**
+     * Recherche web demandée : le job récolte d'abord un dossier de faits datés
+     * (services/web-research.service.js) et les cartes s'y tiennent pour tout ce
+     * qui a pu changer. Le résultat de la récolte — statut, sources citées — est
+     * rangé dans `stats.web`, car c'est une trace d'exécution, pas un réglage.
+     */
+    web_search: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     /** Identifiants des fichiers joints servant de source (voir modèle Upload). */
     upload_ids: {
       type: DataTypes.JSON,

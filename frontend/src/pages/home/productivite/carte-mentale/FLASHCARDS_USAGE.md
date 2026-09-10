@@ -43,6 +43,8 @@ Deux boutons, deux gestes distincts.
 3. Choisir le nombre de cartes et le niveau (débutant / intermédiaire / avancé).
 4. Choisir où ranger les cartes : groupes automatiques (déduits du sujet), sans groupe,
    ou un groupe existant.
+5. Activer **Rechercher sur le web** si le sujet demande des informations à jour
+   (voir plus bas).
 
 ### « + carte » — une carte sur un mot précis
 
@@ -61,6 +63,53 @@ Le niveau commande le contenu du verso : **débutant** la définition seule,
 Rien n'entre dans la collection sans validation : les propositions s'affichent, on
 écarte ce qu'on ne veut pas, puis on valide le reste.
 
+## Contenu récent : la recherche web
+
+Un interrupteur **Rechercher sur le web** dans la fenêtre de génération (collection ou
+lot de cartes). Il n'a d'intérêt que sur un sujet qui bouge : versions d'un logiciel,
+chiffres, prix, lois, classements, dirigeants, état de l'art.
+
+Ce qu'il change : avant d'écrire la moindre carte, le serveur récolte un dossier de
+faits **datés et sourcés** (outil de recherche du fournisseur d'IA), puis les cartes se
+tiennent à ce dossier pour tout ce qui a pu changer — et mentionnent la date du fait,
+pour ne pas devenir fausses en silence. Les pages consultées sont affichées à la fin de
+la génération.
+
+Sans cet interrupteur, les cartes reposent sur les connaissances du modèle, arrêtées à
+sa date d'entraînement : très bien pour la photosynthèse ou les temps de l'espagnol,
+insuffisant pour tout ce qui date.
+
+Trois cas dégradés, chacun annoncé à la fin de la génération plutôt que passé sous
+silence : recherche indisponible sur le serveur, aucune information récente trouvée,
+aucune page citée (faits à vérifier avant de s'y fier). Dans les trois cas les cartes
+sont produites quand même : un dossier manquant ne fait pas perdre la génération.
+
+- Backend : `backend/services/web-research.service.js`
+- Réglages serveur : `FLASHCARD_WEB_SEARCH`, `WEB_SEARCH_MODEL`, `WEB_SEARCH_TOOL`
+  (voir `backend/.env.example`)
+- Vérifications hors ligne : `npm run test:web-research`
+
+## Cohérence entre la question et la réponse
+
+Une carte dont le verso ne répond pas au recto est inutilisable, même si les deux
+phrases sont justes. Trois filets, du plus souhaitable au plus contraignant :
+
+1. le prompt l'exige et le montre sur des exemples ;
+2. une détection sans appel réseau (`backend/utils/flashcard-coherence.js`) repère les
+   défauts classiques : verso qui reformule la question, question qui renvoie à un
+   document absent de l'écran (« selon le texte »), verso qui pose une question, recto
+   qui en pose deux, réponse vide de sens ;
+3. les cartes fautives repartent au modèle pour réparation ; celles qui résistent sont
+   écartées, et leur nombre est annoncé à la fin de la génération.
+
+Un défaut plus discret est traité au passage : lors des reformulations, chaque carte
+porte un identifiant. Sans lui, une carte omise par le modèle décalait toutes les
+suivantes et recollait le recto de l'une au verso de l'autre.
+
+- Réglage serveur : `FLASHCARD_COHERENCE_AUDIT=off` pour couper la passe de réparation
+  (moins d'appels, plus de cartes bancales)
+- Vérifications hors ligne : `npm run test:coherence`
+
 ## Générations en arrière-plan
 
 Toutes les générations (collection, lot de cartes, carte à l'unité) tournent sur le
@@ -71,4 +120,5 @@ et, pour « + carte », les propositions qui attendent encore d'être validées.
 - Backend : `backend/jobs/flashcard-generation-job.js`,
   `backend/jobs/flashcard-single-card-job.js`
 - Vérifications hors ligne : `npm run test:flashcards`, `npm run test:single-card`,
-  `npm run test:uploads`
+  `npm run test:uploads`, `npm run test:coherence`, `npm run test:web-research`,
+  `npm run test:inputs`

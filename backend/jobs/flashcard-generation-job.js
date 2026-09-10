@@ -16,6 +16,7 @@ const Flashcard = require('../models/Flashcard');
 const generationService = require('../services/flashcard-generation.service');
 const planRestrictionsService = require('../services/planRestrictionsService');
 const uploadService = require('../services/upload.service');
+const webResearchService = require('../services/web-research.service');
 const pushService = require('../services/push.service');
 
 /** Part de la progression consacrée au plan, avant la première carte. */
@@ -26,6 +27,39 @@ const PLAN_PROGRESS = 10;
  * cartes qui portent réellement sur eux.
  */
 const MIN_SOURCE_CHARS = 200;
+
+/**
+ * Récolte des faits récents sur le web, quand l'utilisateur l'a demandée.
+ *
+ * Une recherche infructueuse ou en panne ne fait PAS échouer la génération : les
+ * cartes sont alors écrites sans elle, et l'état de la recherche est consigné
+ * dans `stats.web` pour que l'interface le dise. Le contraire — échouer — perdrait
+ * un travail utilisable ; le taire — laisser croire à des cartes à jour — serait
+ * pire encore.
+ *
+ * @returns {Promise<{text: string, info: object}>}
+ */
+async function collectRecentFacts(job) {
+  try {
+    const research = await webResearchService.researchSubject({
+      subject: job.subject,
+      language: job.language,
+      level: job.level,
+    });
+    return {
+      text: research.text,
+      info: {
+        status: research.status,
+        sources: research.sources,
+        model: research.model,
+        at: research.at,
+      },
+    };
+  } catch (error) {
+    console.error('[flashcard-job] recherche web échouée :', error.message);
+    return { text: '', info: { status: 'error', message: error.message, sources: [] } };
+  }
+}
 
 async function update(job, fields) {
   Object.assign(job, fields);
@@ -84,6 +118,8 @@ async function runFlashcardGenerationJob(jobId) {
     duplicates: 0,
     shortened: 0,
     truncated: 0,
+    repaired: 0,
+    dropped: 0,
     failedGroups: [],
     // Ajout de cartes à une collection existante : conservé d'un enregistrement
     // à l'autre, c'est ce qui distingue ce travail d'une création.
@@ -119,14 +155,29 @@ async function runFlashcardGenerationJob(jobId) {
       );
     }
 
-    await update(job, { step: 'Conception du plan…', progress: 4 });
+    // Faits récents : demandés explicitement, ils font autorité sur ce que le
+    // modèle croit savoir des sujets qui bougent.
+    let researchText = '';
+    if (job.web_search) {
+      await update(job, { step: 'Recherche des informations récentes…', progress: 4 });
+      const research = await collectRecentFacts(job);
+      researchText = research.text;
+      stats.web = research.info;
+    }
+
+    await update(job, { step: 'Conception du plan…', progress: job.web_search ? 8 : 4, stats });
     const plan = await generationService.generatePlan(
       job.subject,
       job.card_count,
       job.level,
       job.language,
-      sourceText
+      sourceText,
+      researchText
     );
+    // Un lexique se met en cartes autrement qu'un texte suivi, et le contrôle de
+    // cohérence doit le savoir : dans une liste, le recto est un terme, pas une
+    // question.
+    const entryList = generationService.looksLikeEntryList(sourceText);
 
     if (await isCanceled(job.id)) return;
 
@@ -204,6 +255,7 @@ async function runFlashcardGenerationJob(jobId) {
           language: job.language,
           existingFronts,
           sourceText,
+          researchText,
         });
       } catch (error) {
         console.error(`[flashcard-job] groupe « ${group.title} » échoué :`, error.message);
@@ -216,10 +268,12 @@ async function runFlashcardGenerationJob(jobId) {
         continue;
       }
 
-      const prepared = await generationService.prepareCards(rawCards, seen, job.language);
+      const prepared = await generationService.prepareCards(rawCards, seen, job.language, { entryList });
       stats.duplicates += prepared.duplicates;
       stats.shortened += prepared.shortened;
       stats.truncated += prepared.truncated;
+      stats.repaired += prepared.repaired;
+      stats.dropped += prepared.dropped;
 
       if (prepared.accepted.length > 0) {
         // Au-delà du quota de groupes du plan, les cartes restent dans la

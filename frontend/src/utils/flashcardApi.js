@@ -27,9 +27,13 @@ export const createDeck = async (name, description = '') => {
  * Lance la génération d'une collection côté serveur.
  * Répond immédiatement : la génération se poursuit même si l'application est
  * fermée, et son avancement se suit avec fetchGenerationJob.
+ * @param {boolean} [webSearch] récolter d'abord des faits datés par recherche
+ *   web, pour un sujet dont le contenu bouge. Le serveur peut la refuser si elle
+ *   n'y est pas configurée : `job.web_search` dit ce qui a réellement été retenu,
+ *   et `job.stats.web` ce que la recherche a donné.
  * @returns {{ job, capped }}
  */
-export const startDeckGeneration = async ({ subject, cardCount, level, language, uploadIds }) => {
+export const startDeckGeneration = async ({ subject, cardCount, level, language, uploadIds, webSearch }) => {
   try {
     const { data } = await api.post('/api/flashcard-decks/generate', {
       subject,
@@ -37,6 +41,7 @@ export const startDeckGeneration = async ({ subject, cardCount, level, language,
       level,
       language,
       uploadIds,
+      webSearch,
     });
     return data;
   } catch (error) {
@@ -50,9 +55,10 @@ export const startDeckGeneration = async ({ subject, cardCount, level, language,
  * Même suivi que la génération d'une collection (fetchGenerationJob).
  * @param {'auto'|'none'|number|string} [chapterId] destination des cartes :
  *   'auto' (groupes déduits du sujet), 'none' (hors groupe) ou un groupe existant.
+ * @param {boolean} [webSearch] voir startDeckGeneration.
  * @returns {{ job, capped }}
  */
-export const startDeckCardsGeneration = async (deckId, { subject, cardCount, level, language, uploadIds, chapterId }) => {
+export const startDeckCardsGeneration = async (deckId, { subject, cardCount, level, language, uploadIds, chapterId, webSearch }) => {
   try {
     const { data } = await api.post(`/api/flashcard-decks/${deckId}/cards/generate`, {
       subject,
@@ -61,6 +67,7 @@ export const startDeckCardsGeneration = async (deckId, { subject, cardCount, lev
       language,
       uploadIds,
       chapterId,
+      webSearch,
     });
     return data;
   } catch (error) {

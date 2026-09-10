@@ -270,6 +270,13 @@ const dbReadyPromise = (async () => {
     } catch (e) {
       if (!e.message?.includes('already exists')) console.warn('flashcard_job.refine_prompt:', e.message);
     }
+    // Cartes à contenu récent : la génération commence par une recherche web.
+    try {
+      await qi.addColumn('flashcard_job', 'web_search', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false });
+      console.log('Colonne flashcard_job.web_search ajoutée.');
+    } catch (e) {
+      if (!e.message?.includes('already exists')) console.warn('flashcard_job.web_search:', e.message);
+    }
     // Photo sans texte : ce qui est stocké est une description, pas une transcription.
     try {
       await qi.addColumn('upload', 'content_kind', { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'text' });

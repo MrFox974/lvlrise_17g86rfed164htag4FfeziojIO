@@ -33,6 +33,12 @@ const POLL_INTERVAL_MS = 3000;
  * être rangées dans des groupes déduits du sujet, hors groupe, ou dans un
  * groupe précis.
  *
+ * Sur un sujet dont le contenu bouge (versions, chiffres, lois, classements), la
+ * recherche web fait précéder la rédaction d'une récolte de faits datés : les
+ * cartes s'y tiennent, et les pages consultées sont affichées à la fin. Le
+ * serveur peut ne pas en disposer ; c'est alors dit, plutôt que de laisser croire
+ * à des cartes à jour.
+ *
  * Pour une carte isolée — un mot à définir, une notion à expliquer — c'est
  * GenerateCardModal qu'il faut, pas celle-ci.
  *
@@ -53,6 +59,7 @@ function GenerateDeckModal({
   const [level, setLevel] = useState('intermediaire');
   const [chapterId, setChapterId] = useState('auto');
   const [uploads, setUploads] = useState([]);
+  const [webSearch, setWebSearch] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const [job, setJob] = useState(null);
@@ -128,6 +135,7 @@ function GenerateDeckModal({
     setLevel('intermediaire');
     setChapterId('auto');
     setUploads([]);
+    setWebSearch(false);
     setError('');
     setJob(null);
     setCapped(null);
@@ -151,6 +159,7 @@ function GenerateDeckModal({
         level,
         uploadIds: uploads.map((u) => u.id),
         chapterId,
+        webSearch,
       };
       const data = targetDeck
         ? await startDeckCardsGeneration(targetDeck.id, params)
@@ -175,7 +184,7 @@ function GenerateDeckModal({
     } finally {
       setStarting(false);
     }
-  }, [subject, cardCount, level, chapterId, uploads, starting, trackJob, targetDeck]);
+  }, [subject, cardCount, level, chapterId, uploads, webSearch, starting, trackJob, targetDeck]);
 
   const handleCancel = useCallback(async () => {
     if (!job) return;
@@ -190,6 +199,30 @@ function GenerateDeckModal({
   const running = job && (job.status === 'queued' || job.status === 'running');
   const finished = job && job.status === 'ready';
   const failed = job && (job.status === 'error' || job.status === 'canceled');
+
+  // Ce que la recherche web a réellement donné. Une génération qui s'est passée
+  // d'elle ne doit pas passer pour une génération à jour : chaque cas dégradé a
+  // sa phrase.
+  const webSources = job?.stats?.web?.sources || [];
+  const webNotice = (() => {
+    if (!job) return '';
+    if (webSearch && !job.web_search) {
+      return 'Recherche web indisponible sur le serveur : les cartes reposent sur les '
+        + 'connaissances du modèle, sans garantie d\'actualité.';
+    }
+    if (!job.web_search) return '';
+    switch (job.stats?.web?.status) {
+      case 'empty':
+        return 'La recherche web n\'a rien trouvé de récent sur ce sujet : les cartes reposent '
+          + 'sur les connaissances du modèle.';
+      case 'unsourced':
+        return 'La recherche web n\'a cité aucune page : vérifiez les faits datés avant de vous y fier.';
+      case 'error':
+        return 'La recherche web a échoué : les cartes ont été écrites sans elle.';
+      default:
+        return '';
+    }
+  })();
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -206,7 +239,7 @@ function GenerateDeckModal({
               {targetDeck ? ` dans « ${targetDeck.name} »` : ''}.
             </p>
 
-            {(job.stats?.failedGroups?.length > 0 || capped) && (
+            {(job.stats?.failedGroups?.length > 0 || capped || job.stats?.dropped > 0 || webNotice) && (
               <div className="text-xs text-[var(--om-muted)] bg-[var(--om-surface-2)] rounded-[10px] p-3 mb-4 space-y-1">
                 {capped && (
                   <p>{capped.generated} cartes sur les {capped.asked} demandées : limite de votre plan atteinte.</p>
@@ -214,6 +247,35 @@ function GenerateDeckModal({
                 {job.stats?.failedGroups?.length > 0 && (
                   <p>Groupe(s) non généré(s) : {job.stats.failedGroups.join(', ')}.</p>
                 )}
+                {/* Une carte dont la réponse ne répondait pas à la question est
+                    écartée plutôt que livrée : autant le dire. */}
+                {job.stats?.dropped > 0 && (
+                  <p>
+                    {job.stats.dropped} carte{job.stats.dropped > 1 ? 's' : ''} écartée
+                    {job.stats.dropped > 1 ? 's' : ''} : la réponse ne correspondait pas à la question.
+                  </p>
+                )}
+                {webNotice && <p>{webNotice}</p>}
+              </div>
+            )}
+
+            {webSources.length > 0 && (
+              <div className="text-xs text-[var(--om-muted)] mb-4">
+                <p className="mb-1">Sources consultées :</p>
+                <ul className="space-y-1">
+                  {webSources.map((source) => (
+                    <li key={source.url}>
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[var(--om-accent)] hover:underline break-all"
+                      >
+                        {source.title || source.url}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 
@@ -361,6 +423,26 @@ function GenerateDeckModal({
                 </button>
               ))}
             </div>
+
+            <span className="block text-sm font-medium text-[var(--om-text)] mb-1.5">Contenu récent</span>
+            <button
+              type="button"
+              onClick={() => setWebSearch((value) => !value)}
+              disabled={starting}
+              aria-pressed={webSearch}
+              className={`w-full px-3 py-2 rounded-[10px] border text-left text-sm transition-colors mb-4 disabled:opacity-60 ${
+                webSearch
+                  ? 'border-[var(--om-accent)] bg-[var(--om-accent)]/10'
+                  : 'border-[var(--om-line)] hover:bg-[var(--om-surface-2)]'
+              }`}
+            >
+              <span className="font-medium text-[var(--om-text)]">Rechercher sur le web</span>
+              <span className="text-[var(--om-muted)]">
+                {' '}— pour un sujet qui bouge : versions, chiffres, lois, classements. Les faits
+                sont vérifiés et datés avant la rédaction, et les sources sont affichées à la fin.
+                La génération prend un peu plus de temps.
+              </span>
+            </button>
 
             {/* Ranger les cartes n'a de sens que dans une collection qui existe
                 déjà : à la création, les groupes naissent avec elle. */}

@@ -91,6 +91,8 @@ async function runFlashcardCompleteJob(jobId) {
     duplicates: 0,
     shortened: 0,
     truncated: 0,
+    repaired: 0,
+    dropped: 0,
     failedGroups: [],
     // Ce travail ajoute toujours à une collection existante.
     append: true,
@@ -196,6 +198,8 @@ async function runFlashcardCompleteJob(jobId) {
       stats.duplicates += prepared.duplicates;
       stats.shortened += prepared.shortened;
       stats.truncated += prepared.truncated;
+      stats.repaired += prepared.repaired;
+      stats.dropped += prepared.dropped;
 
       const accepted = prepared.accepted.slice(0, available);
       if (accepted.length > 0) {

@@ -16,6 +16,7 @@
     "migrate:single-card": "node run-migration-007.js",
     "migrate:debats": "node run-migration-008.js",
     "migrate:flashcard-complete": "node run-migration-009.js",
+    "migrate:web-research": "node run-migration-011.js",
     "generate-vapid": "node scripts/generate-vapid.js",
     "test:notifications": "node scripts/test-notifications.js",
     "test:flashcards": "node scripts/test-flashcard-generation.js",
@@ -23,6 +24,8 @@
     "test:llm": "node scripts/test-llm-output.js",
     "test:uploads": "node scripts/test-upload-extraction.js",
     "test:inputs": "node scripts/test-generation-inputs.js",
+    "test:coherence": "node scripts/test-flashcard-coherence.js",
+    "test:web-research": "node scripts/test-web-research.js",
     "seed:routines": "node scripts/seed-routines.js",
     "seed:flashcards": "node scripts/seed-flashcards.js"
   },
